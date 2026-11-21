@@ -1,7 +1,7 @@
 {
   "id": "qqmusic",
   "name": "QQ Music",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "minAppVersion": "0.1.20",
   "main": "index.js",
   "playback": "stream",
@@ -46,11 +46,6 @@
       "builtin": "home"
     },
     {
-      "title": "Featured Playlists",
-      "page": "playlists",
-      "icon": "playlist"
-    },
-    {
       "title": "Charts",
       "page": "charts",
       "icon": "chart"
@@ -91,6 +86,16 @@
         "Referer": "https://y.qq.com/",
         "User-Agent": "Mozilla/5.0"
       }
+    }
+  ],
+  "signInMethods": [
+    {
+      "id": "qq",
+      "label": "QQ 扫码登录"
+    },
+    {
+      "id": "wechat",
+      "label": "微信扫码登录"
     }
   ]
 }

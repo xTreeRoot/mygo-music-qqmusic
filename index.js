@@ -486,9 +486,9 @@ export async function qqFinishSignIn(value) {
   return profile;
 }
 
-export async function signIn() {
+export async function signIn({ method: selectedMethod } = {}) {
   cancelSignIn();
-  const method = (typeof host.setting === 'function' ? host.setting('loginMethod') || '' : '').trim().toLowerCase();
+  const method = (selectedMethod || (typeof host.setting === 'function' ? host.setting('loginMethod') || '' : '')).trim().toLowerCase();
   if (method && !['qq', 'wechat', '微信', 'wx'].includes(method)) throw qqAuthError(host.t('Login method must be QQ or WeChat'));
   const generation = signInGeneration;
   const task = createLoginTask(host.t('This sign-in attempt was canceled'));

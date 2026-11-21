@@ -8,10 +8,10 @@ const authKey='qqmusic.auth.v1',activeKey='qqmusic.active.v1';
 const png=await QRCode.toBuffer('https://example.com/fixture-qr');
 const session=loginType=>({musicid:'11111',musickey:'old-fixture',loginType});
 const profile=()=>Response.json({code:0,req_0:{code:0,data:{info:{nick:'Fixture'}}}});
-function fixture(plugin,method,previous,{cancel=false,rejectProfile=false}={}){
+function fixture(plugin,method,previous,{cancel=false,rejectProfile=false,configured=method}={}){
  const storage=new Map([[authKey,previous],[activeKey,false]]),calls=[],prompts=[];
  const original=globalThis.fetch;
- globalThis.host={t:v=>v,platform:'android',setting:()=>method,
+ globalThis.host={t:v=>v,platform:'android',setting:()=>configured,
   crypto:{md5:v=>createHash('md5').update(v).digest('hex')},
   storage:{get:k=>storage.get(k),set:(k,v)=>storage.set(k,v)},
   signInPrompt:p=>{prompts.push(p);if(p.qr&&cancel)queueMicrotask(()=>plugin.cancelSignIn());}};
@@ -59,6 +59,12 @@ for(const entry of ['./index.js','./dist/index.js']){
    }finally{f.close();}
   });
  }
+ for(const method of ['qq','wechat'])test(`${entry}: explicit login selection overrides the legacy configured provider`,async()=>{
+  const type=method==='qq'?2:1;
+  const f=fixture(plugin,method,session(type===1?2:1),{configured:method==='qq'?'wechat':'qq'});
+  try{assert.equal((await plugin.signIn({method})).id,'22222');assert.equal(f.storage.get(authKey).loginType,type);assert.ok(f.prompts.some(p=>p.qr));}
+  finally{f.close();}
+ });
  for(const [method,type] of [['qq',2],['QQ',2],['wechat',1],['wx',1],['微信',1],['',1]])test(`${entry}: ${method||'unset'} validates and reuses only the matching saved provider`,async()=>{
   const previous=session(type),f=fixture(plugin,method,previous);
   try{
