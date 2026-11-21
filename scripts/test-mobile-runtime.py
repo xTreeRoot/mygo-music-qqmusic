@@ -21,6 +21,7 @@ for platform in ['ios','android']:
  subprocess.run(command,check=True,capture_output=True)
  print('Snapshot',platform,subprocess.check_output(['git','rev-parse',options.ref],cwd=options.mb,text=True).strip())
 lyric='[00:01.00]中文歌词🎵'
+large_qrc=re.search(r"const qingtian = '([0-9A-F]+)'",(plugin/'qrc.test.mjs').read_text()).group(1)
 qrc=re.search(r"const lrc = '([0-9A-F]+)'",(plugin/'qrc.test.mjs').read_text()).group(1)
 class Runtime:
  def __init__(self,platform):
@@ -85,7 +86,7 @@ class Runtime:
    if method=='GetSession':d={'session':{'uid':'fixture-device','sid':'fixture-session'}}
    elif method=='QQLogin':d={'musicid':'12345','musickey':'Q_fixture','loginType':2}
    elif method=='Login':d={'str_musicid':'1152921504606846976','musickey':'W_fixture','loginType':1}
-   elif method=='GetPlayLyricInfo':d={}
+   elif method=='GetPlayLyricInfo':d={'lyric':large_qrc} if param.get('songMID')=='long-qrc' and param.get('crypt')==1 else {}
    elif method=='GetLoginUserInfo':d={'info':{'nick':'测试账号','headurl':'http://qpic.y.qq.com/avatar.jpg'}}
    elif method=='DoSearchForQQMusicDesktop':
     page=param['page_num'];d={'body':{'song':{'list':[{'mid':'song'+str(page),'title':'歌曲'+str(page),'interval':123,'album':{'mid':'album','name':'专辑','albumPic':'//qpic.y.qq.com/album.jpg?size=300'},'singer':[{'mid':'artist','name':'歌手','singerPic':'http://y.gtimg.cn/custom-artist.jpg'}]}]}},'meta':{'sum':40}}
@@ -96,7 +97,7 @@ class Runtime:
   if data is not None:raw=json.dumps(data,ensure_ascii=False).encode()
   return {'status':status,'url':address,'headers':headers,'setCookies':cookies,'body':raw.decode(errors='replace'),'base64':base64.b64encode(raw).decode()}
  def finish(self,status):
-  for _ in range(150):
+  for _ in range(4096):
    if status<0:raise RuntimeError(self.text('mbjs_result'))
    if status==1:return json.loads(self.text('mbjs_result'))
    event=json.loads(self.text('mbjs_take_event'))
@@ -117,6 +118,7 @@ for platform in ['ios','android']:
   assert one['tracks'][0]['album']['imageUrl']=='https://qpic.y.qq.com/album.jpg?size=300'
   assert one['tracks'][0]['artists'][0]['imageUrl']=='https://y.gtimg.cn/custom-artist.jpg'
   result=r.call('lyrics',{'id':'song1'});assert result['lrc']==lyric
+  long=r.call('lyrics',{'id':'long-qrc'});assert len(long['lines'])>20 and any(line.get('words') for line in long['lines'])
   assert '[00:' in r.call('decodeQRC',qrc)
   audio=r.call('stream',{'id':'song1','quality':'standard'});assert audio['type']=='mp3' and audio['url'].endswith('fixture.mp3')
   profile=r.call('signIn');assert profile['imageUrl']=='https://qpic.y.qq.com/avatar.jpg';assert profile['id']=='1152921504606846976' and any(p.get('qr') for p in r.prompts)

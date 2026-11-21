@@ -14650,19 +14650,19 @@ async function lyricTranslation(id) {
 async function lyrics({ id }) {
   try {
     const data2 = await rpc("music.musichallSong.PlayLyricInfo", "GetPlayLyricInfo", { songMID: id, crypt: 1, ct: 24, cv: 0, lver: 0, qrc: 1, trans: 1, roma: 0 });
-    const original = decodeQRC(data2.lyric || "");
+    const original = await decodeQRCAsync(data2.lyric || "");
     const lines = parseQRC(original);
     if (lines.length) {
       let translation2 = "";
       try {
-        translation2 = decodeQRC(data2.trans || "");
+        translation2 = await decodeQRCAsync(data2.trans || "");
       } catch {
       }
       if (!translation2) translation2 = await lyricTranslation(id);
       if (translation2) attachLyricTranslations(lines, translation2);
       return { lines, translation: translation2 };
     }
-    if (/\[\d{1,3}:\d{2}/.test(original)) return { lrc: original, translation: decodeQRC(data2.trans || "") };
+    if (/\[\d{1,3}:\d{2}/.test(original)) return { lrc: original, translation: await decodeQRCAsync(data2.trans || "") };
   } catch {
   }
   const data = await cgi("/lyric/fcgi-bin/fcg_query_lyric_new.fcg", { songmid: id });
@@ -16121,12 +16121,14 @@ function cryptBlock(block, keys, decrypt) {
   }
   return permute(right << 32n | left, qrcFP);
 }
-function decodeQRC(input) {
-  if (input === "") return "";
-  if (typeof input !== "string" || !/^(?:[0-9a-fA-F]{16})+$/.test(input)) throw new Error("Malformed QRC ciphertext");
+function qrcBytes(input) {
+  if (typeof input !== "string" || input.length > 1024 * 1024 || !/^(?:[0-9a-fA-F]{16})+$/.test(input)) throw new Error("Malformed QRC ciphertext");
   const bytes2 = new Uint8Array(input.length / 2);
   for (let i = 0; i < bytes2.length; i++) bytes2[i] = parseInt(input.slice(i * 2, i * 2 + 2), 16);
-  for (let i = 0; i < bytes2.length; i += 8) {
+  return bytes2;
+}
+function decryptQRCBlocks(bytes2, start, end) {
+  for (let i = start; i < end; i += 8) {
     let block = 0n;
     for (let j = 0; j < 8; j++) block = block << 8n | BigInt(bytes2[i + j]);
     block = swapWords(block);
@@ -16138,9 +16140,26 @@ function decodeQRC(input) {
       block >>= 8n;
     }
   }
+}
+function inflateQRC(bytes2) {
   const inflater = new qrcPako.Inflate();
   if (!inflater.push(bytes2, false) || inflater.err || !inflater.ended) throw new Error("Invalid QRC compression");
   return decodeUTF8(inflater.result, true);
+}
+function decodeQRC(input) {
+  if (input === "") return "";
+  const bytes2 = qrcBytes(input);
+  decryptQRCBlocks(bytes2, 0, bytes2.length);
+  return inflateQRC(bytes2);
+}
+async function decodeQRCAsync(input) {
+  if (input === "") return "";
+  const bytes2 = qrcBytes(input);
+  for (let start = 0; start < bytes2.length; start += 32) {
+    decryptQRCBlocks(bytes2, start, Math.min(start + 32, bytes2.length));
+    if (start + 32 < bytes2.length) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return inflateQRC(bytes2);
 }
 export {
   account,
@@ -16154,6 +16173,7 @@ export {
   createLibrary,
   createPlaylist,
   decodeQRC,
+  decodeQRCAsync,
   deletePlaylist,
   home,
   isLiked,

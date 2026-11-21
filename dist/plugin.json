@@ -1,7 +1,7 @@
 {
   "id": "qqmusic",
   "name": "QQ Music",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "minAppVersion": "0.1.20",
   "main": "index.js",
   "playback": "stream",

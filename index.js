@@ -254,16 +254,16 @@ async function lyricTranslation(id) {
 export async function lyrics({ id }) {
   try {
     const data = await rpc("music.musichallSong.PlayLyricInfo", "GetPlayLyricInfo", { songMID: id, crypt: 1, ct: 24, cv: 0, lver: 0, qrc: 1, trans: 1, roma: 0 });
-    const original = decodeQRC(data.lyric || "");
+    const original = await decodeQRCAsync(data.lyric || "");
     const lines = parseQRC(original);
     if (lines.length) {
       let translation = "";
-      try { translation = decodeQRC(data.trans || ""); } catch { /* Some songs have no encrypted translation. */ }
+      try { translation = await decodeQRCAsync(data.trans || ""); } catch { /* Some songs have no encrypted translation. */ }
       if (!translation) translation = await lyricTranslation(id);
       if (translation) attachLyricTranslations(lines, translation);
       return { lines, translation };
     }
-    if (/\[\d{1,3}:\d{2}/.test(original)) return { lrc: original, translation: decodeQRC(data.trans || "") };
+    if (/\[\d{1,3}:\d{2}/.test(original)) return { lrc: original, translation: await decodeQRCAsync(data.trans || "") };
   } catch { /* QQ may not have QRC for this song; use the ordinary lyrics. */ }
   const data = await cgi("/lyric/fcgi-bin/fcg_query_lyric_new.fcg", { songmid: id });
   let translation = decodeLyric(data.trans);
@@ -1061,12 +1061,15 @@ function cryptBlock(block, keys, decrypt) {
   return permute((right << 32n) | left, qrcFP);
 }
 
-export function decodeQRC(input) {
-  if (input === '') return '';
-  if (typeof input !== 'string' || !/^(?:[0-9a-fA-F]{16})+$/.test(input)) throw new Error('Malformed QRC ciphertext');
+function qrcBytes(input) {
+  if (typeof input !== 'string' || input.length > 1024 * 1024 || !/^(?:[0-9a-fA-F]{16})+$/.test(input)) throw new Error('Malformed QRC ciphertext');
   const bytes = new Uint8Array(input.length / 2);
   for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(input.slice(i * 2, i * 2 + 2), 16);
-  for (let i = 0; i < bytes.length; i += 8) {
+  return bytes;
+}
+
+function decryptQRCBlocks(bytes, start, end) {
+  for (let i = start; i < end; i += 8) {
     let block = 0n;
     for (let j = 0; j < 8; j++) block = (block << 8n) | BigInt(bytes[i + j]);
     block = swapWords(block);
@@ -1075,7 +1078,28 @@ export function decodeQRC(input) {
     block = swapWords(cryptBlock(block, qrcKeys[0], true));
     for (let j = 7; j >= 0; j--) { bytes[i + j] = Number(block & 255n); block >>= 8n; }
   }
+}
+
+function inflateQRC(bytes) {
   const inflater = new qrcPako.Inflate();
   if (!inflater.push(bytes, false) || inflater.err || !inflater.ended) throw new Error('Invalid QRC compression');
   return decodeUTF8(inflater.result, true);
+}
+
+export function decodeQRC(input) {
+  if (input === '') return '';
+  const bytes = qrcBytes(input);
+  decryptQRCBlocks(bytes, 0, bytes.length);
+  return inflateQRC(bytes);
+}
+
+// 每次只解密四个块，再交回宿主事件循环；长逐字歌词不能耗尽移动端单次执行预算。
+export async function decodeQRCAsync(input) {
+  if (input === '') return '';
+  const bytes = qrcBytes(input);
+  for (let start = 0; start < bytes.length; start += 32) {
+    decryptQRCBlocks(bytes, start, Math.min(start + 32, bytes.length));
+    if (start + 32 < bytes.length) await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  return inflateQRC(bytes);
 }
