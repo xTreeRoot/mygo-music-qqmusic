@@ -9,7 +9,7 @@ for (const entry of ['./index.js', './dist/index.js']) {
     const storage = new Map();
     let calls, legacy, page;
     const rpc = data => Response.json({ code: 0, req_0: { code: 0, data } });
-    const info = { id, title: 'Playlist', picurl: 'cover', desc: 'description', host_nick: 'Owner' };
+    const info = { id, title: 'Playlist', picurl: 'http://qpic.y.qq.com/music_cover/fixture/300?n=1', desc: 'description', host_nick: 'Owner' };
     const success = () => Response.json({ code: 0, subcode: 0, cdlist: [{ dissname: 'Legacy', songnum: 1, songlist: [{ mid: 'one' }] }] });
     beforeEach(() => {
       globalThis.host = { t: x => x, storage: { get: k => storage.get(k), set: (k, v) => storage.set(k, v), remove: k => storage.delete(k) } };
@@ -41,7 +41,7 @@ for (const entry of ['./index.js', './dist/index.js']) {
       };
       const result = await plugin.playlist({ id });
       assert.deepEqual(offsets, [0, 1, 2]);
-      assert.equal(result.id, id); assert.equal(result.name, 'Playlist'); assert.equal(result.imageUrl, 'cover');
+      assert.equal(result.id, id); assert.equal(result.name, 'Playlist'); assert.equal(result.imageUrl, 'https://qpic.y.qq.com/music_cover/fixture/300?n=1');
       assert.equal(result.owner, 'Owner'); assert.equal(result.trackCount, 3);
       assert.deepEqual(result.tracks.map(t => t.id), ['song0', 'song1', 'song2']);
       assert.equal(calls.filter(m => m === 'CGI').length, 1);

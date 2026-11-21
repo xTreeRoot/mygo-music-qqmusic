@@ -6,7 +6,6 @@
   "Recommended for You": "为你推荐",
   "Login method": "扫码登录方式",
   "WeChat": "微信",
-  "Leave empty for WeChat. Enter QQ to scan with the QQ app.": "留空即可用微信扫码；如需手机 QQ 扫码，输入 QQ。",
   "Preparing WeChat QR code…": "正在准备微信登录二维码…",
   "Preparing QQ QR code…": "正在准备 QQ 登录二维码…",
   "Login method must be QQ or WeChat": "登录方式请填写 QQ 或微信，也可以留空使用微信。",
@@ -17,5 +16,6 @@
   "WeChat QR expired": "微信二维码已过期，请重试获取新二维码。",
   "QQ Music rejected the WeChat login ({global}/{code}/{subcode})": "QQ 音乐拒绝了微信登录（业务码 {global}/{code}/{subcode}）。",
   "QQ Music device limit reached ({global}/{code})": "QQ 音乐登录设备数超出限制（业务码 {global}/{code}），请先在 QQ 音乐客户端管理设备并移除不常用设备后重试。",
-  "QQ Music did not provide a playable stream": "QQ 音乐未提供可播放的音源，请确认账号权益及歌曲所在地区的版权。"
+  "QQ Music did not provide a playable stream": "QQ 音乐未提供可播放的音源，请确认账号权益及歌曲所在地区的版权。",
+  "Choose WeChat or QQ before signing in. Unset uses WeChat. Switching methods requests a new QR code and keeps the old account until the new login succeeds.": "登录前请选择微信或 QQ；未设置时默认微信。切换方式会获取对应二维码，新登录成功前保留原账号。"
 }

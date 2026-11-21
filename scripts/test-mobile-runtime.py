@@ -1,7 +1,8 @@
 # Read-only host snapshots; native libraries and synthetic account state stay in a temporary directory.
 import argparse,base64,ctypes,hashlib,json,pathlib,re,subprocess,tempfile,urllib.parse
 parser=argparse.ArgumentParser(description='Run the release bundle in MB iOS/Android native QuickJS without touching apps or devices.')
-parser.add_argument('--mb',required=True,type=pathlib.Path,help='Read-only local MB repository containing ios and android refs')
+parser.add_argument('--mb',required=True,type=pathlib.Path,help='Read-only local MB repository containing the shared main sources')
+parser.add_argument('--ref',default='main',help='Verified shared MB source revision')
 options=parser.parse_args()
 plugin=pathlib.Path(__file__).resolve().parent.parent
 workspace=tempfile.TemporaryDirectory(prefix='qqmusic-native-')
@@ -9,22 +10,22 @@ root=pathlib.Path(workspace.name)
 subprocess.run(['node','--input-type=module','-e',"import QRCode from 'qrcode'; import {writeFileSync} from 'node:fs'; writeFileSync(process.argv[1],await QRCode.toBuffer('https://open.weixin.qq.com/connect/confirm?uuid=fixture'));",str(root/'login.png')],cwd=plugin,check=True)
 png=(root/'login.png').read_bytes()
 for platform in ['ios','android']:
- paths=subprocess.check_output(['git','ls-tree','-r','--name-only',platform,'ios/Sources/MBJavaScript'],cwd=options.mb,text=True).splitlines()
+ paths=subprocess.check_output(['git','ls-tree','-r','--name-only',options.ref,'ios/Sources/MBJavaScript'],cwd=options.mb,text=True).splitlines()
  paths+=['ios/Sources/MBFoundation/Resources/PluginBootstrap.js']
  for name in paths:
   target=root/'runtime'/platform/name
   target.parent.mkdir(parents=True,exist_ok=True)
-  target.write_bytes(subprocess.check_output(['git','show',platform+':'+name],cwd=options.mb))
+  target.write_bytes(subprocess.check_output(['git','show',options.ref+':'+name],cwd=options.mb))
  directory=root/'runtime'/platform/'ios/Sources/MBJavaScript'
  command=['clang','-shared','-fPIC','-O2','-DCONFIG_VERSION="2026-06-04"','-I'+str(directory/'include'),str(directory/'MBJavaScript.c')]+[str(directory/'vendor'/name) for name in ['quickjs.c','dtoa.c','libregexp.c','libunicode.c','cutils.c']]+['-o',str(root/'runtime'/(platform+'.dylib'))]
  subprocess.run(command,check=True,capture_output=True)
- print('Snapshot',platform,subprocess.check_output(['git','rev-parse',platform],cwd=options.mb,text=True).strip())
+ print('Snapshot',platform,subprocess.check_output(['git','rev-parse',options.ref],cwd=options.mb,text=True).strip())
 lyric='[00:01.00]中文歌词🎵'
 qrc=re.search(r"const lrc = '([0-9A-F]+)'",(plugin/'qrc.test.mjs').read_text()).group(1)
 class Runtime:
  def __init__(self,platform):
   self.lib=ctypes.CDLL(str(root/'runtime'/(platform+'.dylib')))
-  self.storage={};self.prompts=[];self.polls=0;self.requests=[]
+  self.storage={};self.prompts=[];self.polls=0;self.requests=[];self.method='wechat'
   self.callback=ctypes.CFUNCTYPE(ctypes.c_void_p,ctypes.c_void_p,ctypes.c_char_p,ctypes.c_char_p)(self.host)
   self.lib.mbjs_create.argtypes=[type(self.callback),ctypes.c_void_p,ctypes.c_size_t];self.lib.mbjs_create.restype=ctypes.c_void_p
   self.lib.mbjs_evaluate.argtypes=[ctypes.c_void_p,ctypes.c_char_p,ctypes.c_char_p,ctypes.c_int,ctypes.c_int]
@@ -50,7 +51,7 @@ class Runtime:
    elif op=='storage.set':self.storage[a[0]]=a[1];v=None
    elif op=='storage.remove':self.storage.pop(a[0],None);v=None
    elif op=='t':v=a[0]
-   elif op=='setting':v=''
+   elif op=='setting':v=self.method
    elif op=='language':v='zh-CN'
    elif op=='console':v=None
    elif op=='prompt':self.prompts.append(a[0]);v=None
@@ -65,8 +66,14 @@ class Runtime:
   return self.libc.strdup(json.dumps(out,ensure_ascii=False).encode())
  def response(self,event):
   address=event['url'];self.requests.append(event)
-  headers={};cookies=[];data=None;raw=None
-  if '/ptqrshow' in address:raw=png;cookies=['qrsig='+80*'a'+'; Path=/; Secure']
+  headers={};cookies=[];data=None;raw=None;status=200
+  if '/ptqrshow' in address:raw=png;cookies=['qrsig='+80*'a'+'; Domain=.ptlogin2.qq.com; Path=/; Secure']
+  elif '/ptqrlogin' in address:raw=b"ptuiCB('0','0','https://ssl.ptlogin2.graph.qq.com/check_sig?x=1','0','ok','fixture');"
+  elif '/check_sig' in address:
+   status=302;raw=b'';headers={'location':'https://graph.qq.com/oauth2.0/login_jump'};cookies=[v+'; Domain=.graph.qq.com; Path=/' for v in ['p_uin=o123','p_skey=fixture','pt_oauth_token=fixture']]
+  elif '/oauth2.0/login_jump' in address:raw=b''
+  elif '/oauth2.0/authorize' in address:
+   state=urllib.parse.parse_qs(event['body'])['state'][0];status=302;raw=b'';headers={'location':'https://y.qq.com/portal/wx_redirect.html?code=ABCDEF0123456789ABCDEF0123456789&state='+urllib.parse.quote(state)}
   elif 'api.tencentmusic.com' in address:data={'data':{'data':{'q16':'qimei','q36':'qimei36'}}}
   elif '/connect/qrcode/' in address:raw=png
   elif '/connect/l/qrconnect' in address:
@@ -76,17 +83,18 @@ class Runtime:
   else:
    req=json.loads(event['body']);item=req.get('req_0',req.get('req'));method=item['method'];param=item['param']
    if method=='GetSession':d={'session':{'uid':'fixture-device','sid':'fixture-session'}}
+   elif method=='QQLogin':d={'musicid':'12345','musickey':'Q_fixture','loginType':2}
    elif method=='Login':d={'str_musicid':'1152921504606846976','musickey':'W_fixture','loginType':1}
    elif method=='GetPlayLyricInfo':d={}
-   elif method=='GetLoginUserInfo':d={'info':{'nick':'测试账号'}}
+   elif method=='GetLoginUserInfo':d={'info':{'nick':'测试账号','headurl':'http://qpic.y.qq.com/avatar.jpg'}}
    elif method=='DoSearchForQQMusicDesktop':
-    page=param['page_num'];d={'body':{'song':{'list':[{'mid':'song'+str(page),'title':'歌曲'+str(page),'interval':123,'album':{'mid':'album','name':'专辑'},'singer':[{'mid':'artist','name':'歌手'}]}]}},'meta':{'sum':40}}
+    page=param['page_num'];d={'body':{'song':{'list':[{'mid':'song'+str(page),'title':'歌曲'+str(page),'interval':123,'album':{'mid':'album','name':'专辑','albumPic':'//qpic.y.qq.com/album.jpg?size=300'},'singer':[{'mid':'artist','name':'歌手','singerPic':'http://y.gtimg.cn/custom-artist.jpg'}]}]}},'meta':{'sum':40}}
    elif method=='get_song_detail_yqq':d={'track_info':{'mid':param['song_mid'],'file':{'media_mid':'fixture-media'}}}
    elif method in ['UrlGetVkey','CgiGetVkey']:d={'sip':['https://isure.stream.qqmusic.qq.com/'],'midurlinfo':[{'songmid':'song1','purl':'fixture.mp3'}]}
    else:raise ValueError('Unexpected API '+method)
    data={'code':0,('req_0' if 'req_0' in req else 'req'):{'code':0,'data':d}}
   if data is not None:raw=json.dumps(data,ensure_ascii=False).encode()
-  return {'status':200,'url':address,'headers':headers,'setCookies':cookies,'body':raw.decode(errors='replace'),'base64':base64.b64encode(raw).decode()}
+  return {'status':status,'url':address,'headers':headers,'setCookies':cookies,'body':raw.decode(errors='replace'),'base64':base64.b64encode(raw).decode()}
  def finish(self,status):
   for _ in range(150):
    if status<0:raise RuntimeError(self.text('mbjs_result'))
@@ -106,13 +114,19 @@ for platform in ['ios','android']:
   one=r.call('search',{'query':'音乐','kind':'tracks','offset':0});two=r.call('search',{'query':'音乐','kind':'tracks','offset':1})
   assert one['tracks'][0]['id']=='song1' and two['tracks'][0]['id']=='song2'
   assert one['tracks'][0]['duration']==123000 and one['more']
+  assert one['tracks'][0]['album']['imageUrl']=='https://qpic.y.qq.com/album.jpg?size=300'
+  assert one['tracks'][0]['artists'][0]['imageUrl']=='https://y.gtimg.cn/custom-artist.jpg'
   result=r.call('lyrics',{'id':'song1'});assert result['lrc']==lyric
   assert '[00:' in r.call('decodeQRC',qrc)
   audio=r.call('stream',{'id':'song1','quality':'standard'});assert audio['type']=='mp3' and audio['url'].endswith('fixture.mp3')
-  profile=r.call('signIn');assert profile['id']=='1152921504606846976' and any(p.get('qr') for p in r.prompts)
+  profile=r.call('signIn');assert profile['imageUrl']=='https://qpic.y.qq.com/avatar.jpg';assert profile['id']=='1152921504606846976' and any(p.get('qr') for p in r.prompts)
   count=len(r.requests);r.call('signOut');assert r.call('account') is None and len(r.requests)==count
   assert r.storage['qqmusic.auth.v1']['musicid']==profile['id']
   r.call('search',{'query':'匿名','kind':'tracks'});assert 'cookie' not in {k.lower() for k in r.requests[-1]['headers']}
   prompts=len(r.prompts);assert r.call('signIn')['id']==profile['id'] and len(r.prompts)==prompts
-  print('PASS',platform,'native QuickJS: bundle/search/paging/UTF-8/QRC/audio/WeChat QR/retained-session reuse')
+  previous=r.storage['qqmusic.auth.v1'].copy();r.method='qq';r.prompts=[]
+  qq=r.call('signIn');assert qq['id']=='12345' and r.storage['qqmusic.auth.v1']['loginType']==2 and any('QQ' in p.get('text','') and p.get('qr') for p in r.prompts)
+  r.method='wechat';r.prompts=[];wechat=r.call('signIn')
+  assert wechat['id']==previous['musicid'] and r.storage['qqmusic.auth.v1']['loginType']==1 and any('微信' in p.get('text','') and p.get('qr') for p in r.prompts)
+  print('PASS',platform,'native QuickJS: bundle/search/paging/HTTPS artwork/UTF-8/QRC/audio/QQ+WeChat QR/provider switching/retained-session reuse')
  finally:r.close()

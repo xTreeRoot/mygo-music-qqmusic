@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.7 — 2026-11-21
+
+- 将扫码登录方式从手填文字改为 QQ / 微信明确选项，兼容旧设置。
+- 切换扫码方式后不再复用另一方式的旧会话；新账号验证成功才替换，取消或失败保留原账号。
+- 修复首页、榜单、歌单、收藏专辑和账号头像使用 HTTP / 无协议封面而被移动端拒绝的问题，统一规范为 HTTPS 并保留查询参数。
+- 优先使用搜索接口返回的 singerPic，修复自行拼接歌手图片地址造成的 404。
+- 对源码与发行包验证两种方式的二维码、取消、旧会话恢复、跨方式切换和各资源封面输出。
+
 ## 0.3.4 — 2026-11-12
 
 - Continue to the next lower audio quality when a vkey request returns HTTP 500, 502, 503, or 504, with at most one request per quality (#2).

@@ -91,7 +91,7 @@ async function publicPlaylist(id, { cgi, rpc, trackOf }) {
     });
   };
   const result = (info, tracks, total) => ({
-    id: String(id), name: info.dissname || info.title || "", imageUrl: info.logo || info.picurl || "",
+    id: String(id), name: info.dissname || info.title || "", imageUrl: imageURL(info.logo || info.picurl),
     description: info.desc || "", owner: info.nickname || info.nick || info.host_nick || "",
     trackCount: total || tracks.length, tracks,
   });
@@ -125,9 +125,21 @@ async function publicPlaylist(id, { cgi, rpc, trackOf }) {
   throw new Error("QQ Music: playlist incomplete");
 }
 
+// Normalize API artwork before it reaches native HTTPS-only image loaders.
+function imageURL(value) {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  try {
+    const text = value.trim();
+    const url = new URL(text.startsWith('//') ? 'https:' + text : text);
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return '';
+    url.protocol = 'https:';
+    return url.href;
+  } catch { return ''; }
+}
+
 function artistOf(a = {}) {
   const mid = a.mid || a.singermid || a.singer_mid || a.singerMid || a.singerMID || "";
-  return { id: String(mid), name: a.name || a.singername || a.singer_name || a.singerName || "", imageUrl: mid ? `https://y.gtimg.cn/music/photo_new/T001R300x300M000${mid}.jpg` : "" };
+  return { id: String(mid), name: a.name || a.singername || a.singer_name || a.singerName || "", imageUrl: imageURL(a.singerPic) || (mid ? `https://y.gtimg.cn/music/photo_new/T001R300x300M000${mid}.jpg` : "") };
 }
 
 function releaseDate(value) {
@@ -141,7 +153,7 @@ function releaseDate(value) {
 
 function albumOf(a = {}) {
   const mid = a.mid || a.albummid || a.album_mid || a.albumMid || a.albumMID || "";
-  return { id: String(mid), name: a.name || a.title || a.albumname || a.album_name || a.albumName || "", imageUrl: a.albumPic || (mid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${mid}.jpg` : ""), artists: (a.singer || a.singer_list || []).map(artistOf), released: releaseDate(a.publicTime || a.aDate || a.time_public) };
+  return { id: String(mid), name: a.name || a.title || a.albumname || a.album_name || a.albumName || "", imageUrl: imageURL(a.albumPic || a.picurl || a.picUrl || a.albumPicUrl) || (mid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${mid}.jpg` : ""), artists: (a.singer || a.singer_list || []).map(artistOf), released: releaseDate(a.publicTime || a.aDate || a.time_public) };
 }
 
 function trackOf(raw) {
@@ -458,7 +470,7 @@ async function qqAccountFor(session, send = fetch) {
   const data = await qqAuthRpc("music.UserInfo.userInfoServer", "GetLoginUserInfo", {}, session, send);
   if (!data.info || typeof data.info !== "object") throw qqAuthError("QQ Music returned no account information");
   const info = data.info;
-  return { id: session.musicid, name: info.nick || info.nickname || session.musicid, imageUrl: info.headurl || info.logo || info.avatarUrl || info.avatar || "" };
+  return { id: session.musicid, name: info.nick || info.nickname || session.musicid, imageUrl: imageURL(info.headurl || info.logo || info.avatarUrl || info.avatar) };
 }
 
 export async function qqFinishSignIn(value) {
@@ -486,9 +498,10 @@ export async function signIn() {
   const guardedFetch = async (...args) => { current(); const response = await task.fetch(...args); current(); return response; };
   const deps = { fetch: guardedFetch, decodeQR, prompt: value => { current(); host.signInPrompt(value); }, sleep: task.sleep };
   try {
-    // Explicit sign-in can reactivate retained credentials only after validation.
+    // Reuse only the selected provider. A switch must reach its own QR flow,
+    // keeping the previous credential intact until the new account validates.
     const previous = qqSession(host.storage.get(qqAuthStorageKey));
-    if (previous) {
+    if (previous && previous.loginType === (isWechat ? 1 : 2)) {
       try {
         const profile = await qqAccountFor(previous, guardedFetch);
         current();
@@ -597,7 +610,7 @@ export function createBrowse({ rpc, cgi, trackOf, t = value => value }) {
     const data = await rpc("music.playlist.PlaylistSquare", "GetRecommendFeed", { From: 0, Size: 60 });
     return list(data.List, "playlist feed").map(entry => {
       const b = entry.Playlist?.basic || {};
-      return { id: idOf(b.tid), name: b.title || "", description: b.desc || "", trackCount: Number(b.song_cnt) || 0, imageUrl: b.cover?.default_url || b.cover?.big_url || b.cover?.medium_url || b.cover?.small_url || "", owner: b.creator?.nick || "" };
+      return { id: idOf(b.tid), name: b.title || "", description: b.desc || "", trackCount: Number(b.song_cnt) || 0, imageUrl: imageURL(b.cover?.default_url || b.cover?.big_url || b.cover?.medium_url || b.cover?.small_url), owner: b.creator?.nick || "" };
     }).filter(item => /^[1-9]\d*$/.test(item.id));
   }
 
@@ -605,7 +618,7 @@ export function createBrowse({ rpc, cgi, trackOf, t = value => value }) {
     const data = await rpc("musicToplist.ToplistInfoServer", "GetAll", {}, pc);
     return list(data.group, "chart groups").flatMap(group => list(group.toplist, "chart list"))
       .filter(item => Number(item.recType) === 10005 && /^[1-9]\d*$/.test(idOf(item.topId)))
-      .map(item => ({ id: `chart:${item.topId}`, name: item.title || "", imageUrl: item.headPicUrl || item.frontPicUrl || item.musichallPicUrl || "", description: item.intro || "", trackCount: Number(item.totalNum) || 0 }));
+      .map(item => ({ id: `chart:${item.topId}`, name: item.title || "", imageUrl: imageURL(item.headPicUrl || item.frontPicUrl || item.musichallPicUrl), description: item.intro || "", trackCount: Number(item.totalNum) || 0 }));
   }
 
   async function home() {
@@ -629,7 +642,7 @@ export function createBrowse({ rpc, cgi, trackOf, t = value => value }) {
       if (Number(info.recType) !== 10005) unavailable("This chart is not a song chart");
       const tracks = tracksOf(list(data.songInfoList, "chart songs"));
       if (!tracks.length) unavailable("Chart songs are unavailable");
-      return { id, name: info.title || "", imageUrl: info.headPicUrl || info.frontPicUrl || "", description: info.intro || "", trackCount: Number(info.totalNum) || tracks.length, tracks };
+      return { id, name: info.title || "", imageUrl: imageURL(info.headPicUrl || info.frontPicUrl), description: info.intro || "", trackCount: Number(info.totalNum) || tracks.length, tracks };
     }
     if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) unavailable("Invalid playlist ID");
     return publicPlaylist(id, { cgi, rpc, trackOf });
@@ -647,7 +660,7 @@ export function createBrowse({ rpc, cgi, trackOf, t = value => value }) {
     const entries = list(data.body?.songlist?.list, "playlist search results");
     if (!data.meta) throw new Error("QQ Music: missing search metadata");
     if (!entries.length && Number(data.meta.is_filter) < 0) throw new Error("QQ Music search was filtered; try again later");
-    const playlists = entries.map(item => ({ id: idOf(item.dissid), name: item.dissname || "", imageUrl: item.imgurl || "", description: item.introduction || "", trackCount: Number(item.song_count) || 0, owner: item.creator?.name || "" })).filter(item => /^[1-9]\d*$/.test(item.id));
+    const playlists = entries.map(item => ({ id: idOf(item.dissid), name: item.dissname || "", imageUrl: imageURL(item.imgurl), description: item.introduction || "", trackCount: Number(item.song_count) || 0, owner: item.creator?.name || "" })).filter(item => /^[1-9]\d*$/.test(item.id));
     const more = playlists.length > 0 && page * size < Number(data.meta.sum || 0);
     if (more && pages) pages.set(offset + playlists.length, page + 1);
     return { playlists, more };
@@ -713,7 +726,7 @@ export async function home() {
     const cards = feed.v_shelf.flatMap(shelf => shelf.v_niche || []).flatMap(niche => niche.v_card || []);
     const seen = new Set();
     const playlists = cards.filter(card => card.type === 500 && card.subtype === 0 && card.jumptype === 10014 && /^[1-9]\d*$/.test(String(card.id)) && !seen.has(String(card.id)) && seen.add(String(card.id)))
-      .map(card => ({ id: String(card.id), name: card.title || "", imageUrl: card.cover || "" }));
+      .map(card => ({ id: String(card.id), name: card.title || "", imageUrl: imageURL(card.cover) }));
     if (playlists.length) page.sections.unshift({ title: host.t("Recommended for You"), playlists });
   } catch (error) {
     console.warn(`QQ Music recommendations: ${error.message}`);
@@ -755,7 +768,7 @@ export function createLibrary({ qqAuthRpc, qqReadSession, qqAuthCgi, cgi, trackO
     return data;
   }
   const hasMore = p => p.hasmore === true || Number(p.hasmore) === 1;
-  const asPlaylist = (p, mine = false) => ({ id: String(p.tid || p.dissid || p.id || ''), name: p.dirName || p.title || p.dissname || p.name || '', imageUrl: p.bigpicUrl || p.picUrl || p.picurl || p.coverUrl || p.logo || p.albumPicUrl || '', description: p.desc || '', trackCount: Number(p.songNum || p.songnum || p.song_cnt || p.total_song_num || 0), mine });
+  const asPlaylist = (p, mine = false) => ({ id: String(p.tid || p.dissid || p.id || ''), name: p.dirName || p.title || p.dissname || p.name || '', imageUrl: imageURL(p.bigpicUrl || p.picUrl || p.picurl || p.coverUrl || p.logo || p.albumPicUrl), description: p.desc || '', trackCount: Number(p.songNum || p.songnum || p.song_cnt || p.total_song_num || 0), mine });
   const owned = async s => array((await call(s, 'music.musicasset.PlaylistBaseRead', 'GetPlaylistByUin', { uin: s.musicid })).v_playlist, 'playlists');
   const belongsTo = (p, s) => !p.uin || String(p.uin) === s.musicid;
   // Current GetPlaylistByUin omits dirType. Ownership comes from the account's
@@ -933,7 +946,7 @@ export function createLibrary({ qqAuthRpc, qqReadSession, qqAuthCgi, cgi, trackO
       const singers = a.singers || a.singer;
       const artists = Array.isArray(singers) ? singers.map(x => ({ id: String(x.mid || x.singermid || ''), name: x.name || x.singername || '' })) : [];
       if (!artists.length && (a.singerName || a.singername || a.singer_name)) artists.push({ id: String(a.singermid || a.singerMid || a.singer_mid || ''), name: a.singerName || a.singername || a.singer_name });
-      return { id, name: a.albumname || a.album_name || a.albumName || a.name || a.title || '', imageUrl: a.picurl || a.picUrl || a.albumPicUrl || `https://y.gtimg.cn/music/photo_new/T002R300x300M000${id}.jpg`, artists, released: releaseDate(a.release_time || a.publishDate || a.pubtime) };
+      return { id, name: a.albumname || a.album_name || a.albumName || a.name || a.title || '', imageUrl: imageURL(a.picurl || a.picUrl || a.albumPicUrl) || `https://y.gtimg.cn/music/photo_new/T002R300x300M000${id}.jpg`, artists, released: releaseDate(a.release_time || a.publishDate || a.pubtime) };
     });
     return { albums, more: offset + albums.length < data.totalalbum };
   }

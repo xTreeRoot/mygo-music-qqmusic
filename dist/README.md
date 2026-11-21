@@ -1,6 +1,6 @@
 # QQ 音乐插件 · MB / MyGo
 
-**0.3.6**，同一份插件用于 MB 桌面、iOS 和 Android。最低宿主兼容版本为 **MyGo 0.1.20**；移动端需支持 JavaScript 插件的 MB 版本。纯 JavaScript 直接连接腾讯服务，无需 API 服务、Node 后台、ffmpeg 或 Google 服务。
+**0.3.7**，同一份插件用于 MB 桌面、iOS 和 Android。最低宿主兼容版本为 **MyGo 0.1.20**；移动端需支持 JavaScript 插件的 MB 版本。纯 JavaScript 直接连接腾讯服务，无需 API 服务、Node 后台、ffmpeg 或 Google 服务。
 
 本项目由 xTreeRoot 维护，基于 [Lorpaves/mygo-music-qqmusic 0.3.5](https://github.com/Lorpaves/mygo-music-qqmusic)，继续保留 Amamiya23 上游历史及 AGPL-3.0、第三方许可证。来源见 [NOTICE.md](NOTICE.md)。
 
@@ -18,7 +18,9 @@ xTreeRoot/mygo-music-qqmusic
 
 ## 登录
 
-默认使用**微信扫一扫**；需要 QQ 扫码时，在插件设置「扫码登录方式」填写 `QQ`。留空、`wechat`、`wx` 和 `微信` 均使用微信。
+在「设置 → 插件 → QQ 音乐 → 扫码登录方式」中直接选择 **微信** 或 **QQ** 并保存，再点登录获取对应二维码。未设置时默认微信；旧版填写的 `QQ`、`wechat`、`wx` 和 `微信` 仍然兼容。
+
+同一种方式的有效旧会话会先验证后恢复；更换方式时直接获取新方式的二维码，验证新账号成功后才替换。取消或失败保留旧账号，不会把微信账号当成 QQ 扫码结果。
 
 1. 选择 QQ 音乐，点击登录。
 2. 使用对应应用扫描二维码并确认授权。手机上操作时，可用另一台设备扫描；同机识别相册二维码取决于微信或 QQ 自身支持情况。
@@ -41,6 +43,9 @@ xTreeRoot/mygo-music-qqmusic
 
 ## 本次适配
 
+- 扫码方式使用 QQ / 微信明确选项，切换后只复用同方式会话；新账号验证成功前保留原账号。
+- API 返回的 HTTP、无协议封面统一使用 HTTPS，覆盖首页、榜单、搜索、歌单、收藏专辑和头像。歌手图优先使用接口返回的 `singerPic`，避免按 MID 拼出不存在的图片。
+
 - 移除歌词对 `TextDecoder` 的依赖，兼容移动端 QuickJS。
 - 实现宿主 `cancelSignIn()` 合同，覆盖请求头、响应体和扫码等待期间的取消。
 - 退出后保留账号，重新登录先验证复用；取消、旧请求和失败刷新不得覆盖新账号。
@@ -50,11 +55,12 @@ xTreeRoot/mygo-music-qqmusic
 
 ## 验证（2026-11-21）
 
-- 完整回归（含桌面 MoeJS 密码运算）：188 项通过，1 项上游在线测试跳过并已单独执行在线检查。默认未配置 MoeJS 时为 186 项通过、3 项跳过。覆盖源码和发行包的取消、会话停用 / 恢复、搜索分页、音质回退、歌词及歌单行为。
-- 另外执行桌面 MoeJS 的设备加密和真实 QRC 夹具测试，11 项通过；发行包在 MoeJS + Web APIs 中通过搜索、分页、歌词、音频及会话行为检查。
-- 分别从 MB `ios`、`android` 引用只读提取实际 QuickJS 引擎和宿主脚本，运行同一发行包，通过搜索分页、中文歌词、QRC、音频结果、微信二维码交换及退出 / 重新登录检查。接口使用合成响应，未操作用户应用或设备。
-- 匿名在线检查：搜索四种资源、下一页、搜索建议、首页、排行榜、967 首完整歌单、专辑、歌手、歌词、评论和真实 MP3 音频字节均通过。
-- QQ / 微信官方二维码准备及取消检查通过；未进行真实账号授权。三端手机 / 桌面应用内扫码、VIP 权益音质和真机播放仍待实际验收。
+- 默认完整回归：219 项，216 项通过、0 失败、3 项可选在线 / MoeJS 测试跳过。覆盖源码和发行包的扫码切换、取消、旧会话恢复、封面规范化、搜索分页、音质回退、歌词及歌单行为。
+- 发行包单独通过桌面 MoeJS + Web APIs 的搜索、分页、歌词、音频和会话检查。
+- 从 MB `main` 只读提取 iOS / Android 实际 QuickJS 引擎和宿主脚本，发行包通过两种扫码交换、双向切换、会话保留、HTTPS 封面、中文歌词、QRC、音频及分页检查；接口使用合成响应。
+- 匿名实网封面检查：本次首页和四类搜索共返回 172 个图片引用、121 个不同地址，全部通过 HTTPS、HTTP 200、图片内容类型及真实图片文件头检查；图片数量随推荐内容变化。
+- 匿名实网业务检查通过：四类搜索、下一页、建议、首页、榜单、967 首完整歌单、专辑、歌手、歌词、评论及真实 MP3 字节。
+- QQ / 微信官方二维码准备及取消检查通过；未进行真实账号扫码授权。VIP 音质和真机账号切换仍需实际授权验收。
 
 ## 开发与复现
 
@@ -65,6 +71,7 @@ npm test
 npm run check
 npm run test:live
 node scripts/check-qr-live.mjs
+node scripts/check-artwork-live.mjs
 python3 scripts/package.py
 ```
 
@@ -77,7 +84,7 @@ MOEJS_HOST_DIR=/path/to/MB sh scripts/test-desktop-runtime.sh
 python3 scripts/test-mobile-runtime.py --mb /path/to/MB
 ```
 
-桌面检查需要与 MB `go.mod` 匹配的 Go；移动检查需要 Python 3、Clang 及本地 MB 的 `ios` / `android` 引用。可选密码运算回归使用 `MOEJS_HOST_DIR` 环境变量，`go` 必须指向项目要求的工具链。
+桌面检查需要与 MB `go.mod` 匹配的 Go；移动检查需要 Python 3、Clang 及本地 MB 的 `main` 引用。可选密码运算回归使用 `MOEJS_HOST_DIR` 环境变量，`go` 必须指向项目要求的工具链。
 
 `npm run test:signed-in` 为上游保留的只读账号检查，必须自行确认插件数据路径，未在本次验证中执行。账号写入操作仅用合成响应测试，没有创建、删除或修改线上歌单或收藏。
 

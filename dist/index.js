@@ -14493,7 +14493,7 @@ async function publicPlaylist(id, { cgi: cgi2, rpc: rpc2, trackOf: trackOf2 }) {
   const result = (info, tracks2, total) => ({
     id: String(id),
     name: info.dissname || info.title || "",
-    imageUrl: info.logo || info.picurl || "",
+    imageUrl: imageURL(info.logo || info.picurl),
     description: info.desc || "",
     owner: info.nickname || info.nick || info.host_nick || "",
     trackCount: total || tracks2.length,
@@ -14528,9 +14528,21 @@ async function publicPlaylist(id, { cgi: cgi2, rpc: rpc2, trackOf: trackOf2 }) {
   }
   throw new Error("QQ Music: playlist incomplete");
 }
+function imageURL(value) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  try {
+    const text = value.trim();
+    const url = new URL(text.startsWith("//") ? "https:" + text : text);
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password) return "";
+    url.protocol = "https:";
+    return url.href;
+  } catch {
+    return "";
+  }
+}
 function artistOf(a = {}) {
   const mid = a.mid || a.singermid || a.singer_mid || a.singerMid || a.singerMID || "";
-  return { id: String(mid), name: a.name || a.singername || a.singer_name || a.singerName || "", imageUrl: mid ? `https://y.gtimg.cn/music/photo_new/T001R300x300M000${mid}.jpg` : "" };
+  return { id: String(mid), name: a.name || a.singername || a.singer_name || a.singerName || "", imageUrl: imageURL(a.singerPic) || (mid ? `https://y.gtimg.cn/music/photo_new/T001R300x300M000${mid}.jpg` : "") };
 }
 function releaseDate(value) {
   if (typeof value === "string") return value;
@@ -14541,7 +14553,7 @@ function releaseDate(value) {
 }
 function albumOf(a = {}) {
   const mid = a.mid || a.albummid || a.album_mid || a.albumMid || a.albumMID || "";
-  return { id: String(mid), name: a.name || a.title || a.albumname || a.album_name || a.albumName || "", imageUrl: a.albumPic || (mid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${mid}.jpg` : ""), artists: (a.singer || a.singer_list || []).map(artistOf), released: releaseDate(a.publicTime || a.aDate || a.time_public) };
+  return { id: String(mid), name: a.name || a.title || a.albumname || a.album_name || a.albumName || "", imageUrl: imageURL(a.albumPic || a.picurl || a.picUrl || a.albumPicUrl) || (mid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${mid}.jpg` : ""), artists: (a.singer || a.singer_list || []).map(artistOf), released: releaseDate(a.publicTime || a.aDate || a.time_public) };
 }
 function trackOf(raw) {
   const t = raw.musicData || raw.songInfo || raw.songinfo || raw.track_info || raw;
@@ -14837,7 +14849,7 @@ async function qqAccountFor(session3, send = fetch) {
   const data = await qqAuthRpc("music.UserInfo.userInfoServer", "GetLoginUserInfo", {}, session3, send);
   if (!data.info || typeof data.info !== "object") throw qqAuthError("QQ Music returned no account information");
   const info = data.info;
-  return { id: session3.musicid, name: info.nick || info.nickname || session3.musicid, imageUrl: info.headurl || info.logo || info.avatarUrl || info.avatar || "" };
+  return { id: session3.musicid, name: info.nick || info.nickname || session3.musicid, imageUrl: imageURL(info.headurl || info.logo || info.avatarUrl || info.avatar) };
 }
 async function qqFinishSignIn(value) {
   cancelSignIn();
@@ -14874,7 +14886,7 @@ async function signIn() {
   }, sleep: task.sleep };
   try {
     const previous = qqSession(host.storage.get(qqAuthStorageKey));
-    if (previous) {
+    if (previous && previous.loginType === (isWechat ? 1 : 2)) {
       try {
         const profile2 = await qqAccountFor(previous, guardedFetch);
         current();
@@ -14978,12 +14990,12 @@ function createBrowse({ rpc: rpc2, cgi: cgi2, trackOf: trackOf2, t = (value) => 
     const data = await rpc2("music.playlist.PlaylistSquare", "GetRecommendFeed", { From: 0, Size: 60 });
     return list(data.List, "playlist feed").map((entry) => {
       const b = entry.Playlist?.basic || {};
-      return { id: idOf(b.tid), name: b.title || "", description: b.desc || "", trackCount: Number(b.song_cnt) || 0, imageUrl: b.cover?.default_url || b.cover?.big_url || b.cover?.medium_url || b.cover?.small_url || "", owner: b.creator?.nick || "" };
+      return { id: idOf(b.tid), name: b.title || "", description: b.desc || "", trackCount: Number(b.song_cnt) || 0, imageUrl: imageURL(b.cover?.default_url || b.cover?.big_url || b.cover?.medium_url || b.cover?.small_url), owner: b.creator?.nick || "" };
     }).filter((item) => /^[1-9]\d*$/.test(item.id));
   }
   async function charts() {
     const data = await rpc2("musicToplist.ToplistInfoServer", "GetAll", {}, pc);
-    return list(data.group, "chart groups").flatMap((group) => list(group.toplist, "chart list")).filter((item) => Number(item.recType) === 10005 && /^[1-9]\d*$/.test(idOf(item.topId))).map((item) => ({ id: `chart:${item.topId}`, name: item.title || "", imageUrl: item.headPicUrl || item.frontPicUrl || item.musichallPicUrl || "", description: item.intro || "", trackCount: Number(item.totalNum) || 0 }));
+    return list(data.group, "chart groups").flatMap((group) => list(group.toplist, "chart list")).filter((item) => Number(item.recType) === 10005 && /^[1-9]\d*$/.test(idOf(item.topId))).map((item) => ({ id: `chart:${item.topId}`, name: item.title || "", imageUrl: imageURL(item.headPicUrl || item.frontPicUrl || item.musichallPicUrl), description: item.intro || "", trackCount: Number(item.totalNum) || 0 }));
   }
   async function home2() {
     const [featured, ranking] = await Promise.all([featuredPlaylists(), charts()]);
@@ -15004,7 +15016,7 @@ function createBrowse({ rpc: rpc2, cgi: cgi2, trackOf: trackOf2, t = (value) => 
       if (Number(info.recType) !== 10005) unavailable("This chart is not a song chart");
       const tracks = tracksOf(list(data.songInfoList, "chart songs"));
       if (!tracks.length) unavailable("Chart songs are unavailable");
-      return { id, name: info.title || "", imageUrl: info.headPicUrl || info.frontPicUrl || "", description: info.intro || "", trackCount: Number(info.totalNum) || tracks.length, tracks };
+      return { id, name: info.title || "", imageUrl: imageURL(info.headPicUrl || info.frontPicUrl), description: info.intro || "", trackCount: Number(info.totalNum) || tracks.length, tracks };
     }
     if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) unavailable("Invalid playlist ID");
     return publicPlaylist(id, { cgi: cgi2, rpc: rpc2, trackOf: trackOf2 });
@@ -15021,7 +15033,7 @@ function createBrowse({ rpc: rpc2, cgi: cgi2, trackOf: trackOf2, t = (value) => 
     const entries = list(data.body?.songlist?.list, "playlist search results");
     if (!data.meta) throw new Error("QQ Music: missing search metadata");
     if (!entries.length && Number(data.meta.is_filter) < 0) throw new Error("QQ Music search was filtered; try again later");
-    const playlists2 = entries.map((item) => ({ id: idOf(item.dissid), name: item.dissname || "", imageUrl: item.imgurl || "", description: item.introduction || "", trackCount: Number(item.song_count) || 0, owner: item.creator?.name || "" })).filter((item) => /^[1-9]\d*$/.test(item.id));
+    const playlists2 = entries.map((item) => ({ id: idOf(item.dissid), name: item.dissname || "", imageUrl: imageURL(item.imgurl), description: item.introduction || "", trackCount: Number(item.song_count) || 0, owner: item.creator?.name || "" })).filter((item) => /^[1-9]\d*$/.test(item.id));
     const more = playlists2.length > 0 && page * size < Number(data.meta.sum || 0);
     if (more && pages) pages.set(offset + playlists2.length, page + 1);
     return { playlists: playlists2, more };
@@ -15082,7 +15094,7 @@ async function home() {
     if (feed.retcode !== 0 || !Array.isArray(feed.v_shelf)) throw new Error("QQ Music: malformed personal recommendations");
     const cards = feed.v_shelf.flatMap((shelf) => shelf.v_niche || []).flatMap((niche) => niche.v_card || []);
     const seen = /* @__PURE__ */ new Set();
-    const playlists2 = cards.filter((card) => card.type === 500 && card.subtype === 0 && card.jumptype === 10014 && /^[1-9]\d*$/.test(String(card.id)) && !seen.has(String(card.id)) && seen.add(String(card.id))).map((card) => ({ id: String(card.id), name: card.title || "", imageUrl: card.cover || "" }));
+    const playlists2 = cards.filter((card) => card.type === 500 && card.subtype === 0 && card.jumptype === 10014 && /^[1-9]\d*$/.test(String(card.id)) && !seen.has(String(card.id)) && seen.add(String(card.id))).map((card) => ({ id: String(card.id), name: card.title || "", imageUrl: imageURL(card.cover) }));
     if (playlists2.length) page.sections.unshift({ title: host.t("Recommended for You"), playlists: playlists2 });
   } catch (error) {
     console.warn(`QQ Music recommendations: ${error.message}`);
@@ -15122,7 +15134,7 @@ function createLibrary({ qqAuthRpc: qqAuthRpc2, qqReadSession: qqReadSession2, q
     return data;
   }
   const hasMore = (p) => p.hasmore === true || Number(p.hasmore) === 1;
-  const asPlaylist = (p, mine = false) => ({ id: String(p.tid || p.dissid || p.id || ""), name: p.dirName || p.title || p.dissname || p.name || "", imageUrl: p.bigpicUrl || p.picUrl || p.picurl || p.coverUrl || p.logo || p.albumPicUrl || "", description: p.desc || "", trackCount: Number(p.songNum || p.songnum || p.song_cnt || p.total_song_num || 0), mine });
+  const asPlaylist = (p, mine = false) => ({ id: String(p.tid || p.dissid || p.id || ""), name: p.dirName || p.title || p.dissname || p.name || "", imageUrl: imageURL(p.bigpicUrl || p.picUrl || p.picurl || p.coverUrl || p.logo || p.albumPicUrl), description: p.desc || "", trackCount: Number(p.songNum || p.songnum || p.song_cnt || p.total_song_num || 0), mine });
   const owned = async (s) => array((await call(s, "music.musicasset.PlaylistBaseRead", "GetPlaylistByUin", { uin: s.musicid })).v_playlist, "playlists");
   const belongsTo = (p, s) => !p.uin || String(p.uin) === s.musicid;
   const editable = (p, s) => belongsTo(p, s) && Number.isInteger(Number(p.dirId)) && Number(p.dirId) > 0 && Number(p.dirId) < 200 && (p.dirType == null || Number(p.dirType) === 0) && !Number(p.invalid || 0);
@@ -15305,7 +15317,7 @@ function createLibrary({ qqAuthRpc: qqAuthRpc2, qqReadSession: qqReadSession2, q
       const singers = a.singers || a.singer;
       const artists = Array.isArray(singers) ? singers.map((x) => ({ id: String(x.mid || x.singermid || ""), name: x.name || x.singername || "" })) : [];
       if (!artists.length && (a.singerName || a.singername || a.singer_name)) artists.push({ id: String(a.singermid || a.singerMid || a.singer_mid || ""), name: a.singerName || a.singername || a.singer_name });
-      return { id, name: a.albumname || a.album_name || a.albumName || a.name || a.title || "", imageUrl: a.picurl || a.picUrl || a.albumPicUrl || `https://y.gtimg.cn/music/photo_new/T002R300x300M000${id}.jpg`, artists, released: releaseDate(a.release_time || a.publishDate || a.pubtime) };
+      return { id, name: a.albumname || a.album_name || a.albumName || a.name || a.title || "", imageUrl: imageURL(a.picurl || a.picUrl || a.albumPicUrl) || `https://y.gtimg.cn/music/photo_new/T002R300x300M000${id}.jpg`, artists, released: releaseDate(a.release_time || a.publishDate || a.pubtime) };
     });
     return { albums, more: offset + albums.length < data.totalalbum };
   }
