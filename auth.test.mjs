@@ -35,7 +35,7 @@ test("failed login does not replace the previous session", async () => {
   assert.equal(auth.qqReadSession().musicid, "12345");
 });
 
-test("account removes rejected credentials but preserves them on transient failures", async () => {
+test("account disables rejected credentials and preserves them on transient failures", async () => {
   await auth.qqFinishSignIn(qq);
   reply = { code: 1, req_0: { code: 0 } };
   await assert.rejects(auth.account);
@@ -43,6 +43,7 @@ test("account removes rejected credentials but preserves them on transient failu
   reply = { code: 0, req_0: { code: 104401 } };
   assert.equal(await auth.account(), null);
   assert.equal(auth.qqReadSession(), null);
+  assert.deepEqual(storage.get('qqmusic.auth.v1'), qq);
 });
 
 test("missing and malformed sessions cannot authenticate", async () => {

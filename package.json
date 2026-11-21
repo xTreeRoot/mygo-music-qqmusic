@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test test.mjs playlist-fallback.test.mjs stream-fallback.test.mjs auth.test.mjs auth-lifecycle.test.mjs auth-qq.test.mjs auth-wechat.test.mjs qr.test.mjs browse.test.mjs library.test.mjs qrc.test.mjs compat.test.mjs",
+    "test": "node --test test.mjs playlist-fallback.test.mjs stream-fallback.test.mjs auth.test.mjs auth-lifecycle.test.mjs auth-qq.test.mjs auth-wechat.test.mjs qr.test.mjs browse.test.mjs library.test.mjs qrc.test.mjs compat.test.mjs mobile-compat.test.mjs",
     "check": "node --check index.js && node --check dist/index.js",
     "test:live": "node live.mjs",
     "test:signed-in": "node live.mjs --signed-in"
@@ -15,15 +15,15 @@
     "pako": "^3.0.3",
     "qrcode": "^1.5.4"
   },
-  "name": "mygo-qqmusic-wechat",
-  "version": "0.3.5",
+  "name": "mygo-music-qqmusic",
+  "version": "0.3.6",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Lorpaves/mygo-music-qqmusic.git"
+    "url": "https://github.com/xTreeRoot/mygo-music-qqmusic.git"
   },
-  "homepage": "https://github.com/Lorpaves/mygo-music-qqmusic#readme",
+  "homepage": "https://github.com/xTreeRoot/mygo-music-qqmusic#readme",
   "bugs": {
-    "url": "https://github.com/Lorpaves/mygo-music-qqmusic/issues"
+    "url": "https://github.com/xTreeRoot/mygo-music-qqmusic/issues"
   }
 }

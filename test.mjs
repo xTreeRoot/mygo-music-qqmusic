@@ -266,7 +266,8 @@ test('account still signs out an expired QQ session the server refuses to refres
   storage.set('qqmusic.auth.v1', scanSession({ musickeyCreateTime: now - 259200 - 60 }));
   respond = () => response({ code: 0, req_0: { code: 1000, data: null } });
   assert.equal(await plugin.account(), null);
-  assert.equal(storage.get('qqmusic.auth.v1'), undefined);
+  assert.equal(storage.get('qqmusic.auth.v1').musickey, 'old-key');
+  assert.equal(plugin.qqReadSession(), null);
 });
 
 test('lyrics requests the MID and returns LRC', async () => {

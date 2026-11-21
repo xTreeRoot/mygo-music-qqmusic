@@ -11519,6 +11519,7 @@ async function refreshWechatSession(previous, fetch2) {
   const data = { openid: previous.openid || "", refresh_token: previous.refresh_token || "", str_musicid: previous.musicid, musickey: previous.musickey, unionid: previous.unionid || "", refresh_key: previous.refresh_key || "", loginMode: 2 };
   const response = await request(fetch2, MUSIC2, { method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "QQMusic 14090008(android 10)", Referer: "https://y.qq.com/", Cookie: `uin=${previous.musicid}; qqmusic_uin=${previous.musicid}; qm_keyst=${previous.musickey}; qqmusic_key=${previous.musickey}` }, body: JSON.stringify({ comm: { ...comm(previous.device), qq: previous.musicid, authst: previous.musickey, tmeLoginType: 1 }, req: { module: "music.login.LoginServer", method: "Login", param: data } }) });
   const next = session2(checked(await response.json(), "req"), previous.device);
+  if (next.musicid !== previous.musicid) throw new Error("WeChat refresh: account mismatch");
   for (const key of ["openid", "refresh_token", "unionid", "refresh_key", "nick", "logo", "encryptUin"]) if (!next[key] && previous[key]) next[key] = previous[key];
   return next;
 }
@@ -14301,6 +14302,121 @@ function wechatCookieFetch(fetch2) {
   };
 }
 
+// utf8.js
+function decodeUTF8(bytes2, fatal = false) {
+  let text = "";
+  const invalid = () => {
+    if (fatal) throw new TypeError("Invalid UTF-8 lyrics");
+    text += "\uFFFD";
+  };
+  for (let i = 0; i < bytes2.length; ) {
+    const first = bytes2[i++];
+    if (first < 128) {
+      text += String.fromCharCode(first);
+      continue;
+    }
+    const count = first >= 194 && first <= 223 ? 1 : first >= 224 && first <= 239 ? 2 : first >= 240 && first <= 244 ? 3 : 0;
+    if (!count) {
+      invalid();
+      continue;
+    }
+    let value = first & 127 >> count, valid = true;
+    for (let part = 0; part < count; part++) {
+      const next = bytes2[i];
+      const lower = !part && first === 224 ? 160 : !part && first === 240 ? 144 : 128;
+      const upper = !part && first === 237 ? 159 : !part && first === 244 ? 143 : 191;
+      if (next == null || next < lower || next > upper) {
+        valid = false;
+        break;
+      }
+      i++;
+      value = value << 6 | next & 63;
+    }
+    if (valid) text += String.fromCodePoint(value);
+    else invalid();
+  }
+  return text.charCodeAt(0) === 65279 ? text.slice(1) : text;
+}
+
+// login-task.js
+function createLoginTask(message) {
+  const controllers = /* @__PURE__ */ new Set();
+  const pending = /* @__PURE__ */ new Set();
+  let canceled = false;
+  const error = () => new Error(message);
+  const current = () => {
+    if (canceled) throw error();
+  };
+  const wait = (operation) => new Promise((resolve, reject) => {
+    current();
+    const stop = () => reject(error());
+    pending.add(stop);
+    Promise.resolve(operation).then((value) => {
+      pending.delete(stop);
+      if (canceled) reject(error());
+      else resolve(value);
+    }, (cause) => {
+      pending.delete(stop);
+      reject(canceled ? error() : cause);
+    });
+  });
+  return {
+    current,
+    async fetch(address, options = {}) {
+      current();
+      const controller = new AbortController();
+      controllers.add(controller);
+      let response;
+      try {
+        response = await wait(fetch(address, { ...options, signal: controller.signal }));
+      } catch (cause) {
+        controllers.delete(controller);
+        throw cause;
+      }
+      const body = async (method) => {
+        current();
+        try {
+          return await wait(response[method]());
+        } finally {
+          controllers.delete(controller);
+        }
+      };
+      return {
+        ok: response.ok,
+        status: response.status,
+        headers: response.headers,
+        url: response.url,
+        text: () => body("text"),
+        json: () => body("json"),
+        arrayBuffer: () => body("arrayBuffer")
+      };
+    },
+    sleep(milliseconds) {
+      current();
+      return new Promise((resolve, reject) => {
+        const stop = () => {
+          clearTimeout(timer);
+          pending.delete(stop);
+          reject(error());
+        };
+        const timer = setTimeout(() => {
+          pending.delete(stop);
+          resolve();
+        }, milliseconds);
+        pending.add(stop);
+      });
+    },
+    cancel() {
+      if (canceled) return;
+      canceled = true;
+      for (const stop of [...pending]) stop();
+      pending.clear();
+      for (const controller of controllers) controller.abort(error());
+      controllers.clear();
+    }
+  };
+}
+
 // index.js
 var API = "https://u.y.qq.com/cgi-bin/musicu.fcg";
 var headers = { "Content-Type": "application/json", "Referer": "https://y.qq.com/", "User-Agent": "Mozilla/5.0" };
@@ -14507,7 +14623,7 @@ function decodeLyric(value) {
   const binary = atob(value);
   const bytes2 = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes2[i] = binary.charCodeAt(i);
-  return new TextDecoder("utf-8").decode(bytes2);
+  return decodeUTF8(bytes2);
 }
 async function lyricTranslation(id) {
   try {
@@ -14625,6 +14741,7 @@ async function stationNext({ id }) {
   return data.tracks.map(trackOf).filter((track) => track.id);
 }
 var qqAuthStorageKey = "qqmusic.auth.v1";
+var qqActiveStorageKey = "qqmusic.active.v1";
 var qqAuthURL = "https://u.y.qq.com/cgi-bin/musicu.fcg";
 function qqAuthError(message, code) {
   const error = new Error(message);
@@ -14639,6 +14756,7 @@ function qqSession(value) {
   return { ...value, musicid: id, musickey: key, loginType: value.loginType };
 }
 function qqReadSession() {
+  if (host.storage.get(qqActiveStorageKey) === false) return null;
   return qqSession(host.storage.get(qqAuthStorageKey));
 }
 var qqRefreshMargin = 24 * 60 * 60;
@@ -14693,10 +14811,11 @@ function qqAuthContext(session3 = qqReadSession()) {
   };
 }
 var signInGeneration = 0;
-async function qqAuthRpc(module, method, param, session3 = qqReadSession()) {
+var signInTask = null;
+async function qqAuthRpc(module, method, param, session3 = qqReadSession(), send = fetch) {
   const auth = qqAuthContext(session3);
   if (!auth) throw qqAuthError("Sign in to QQ Music", "signIn");
-  const response = await fetch(qqAuthURL, {
+  const response = await send(qqAuthURL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Referer": "https://y.qq.com/", "User-Agent": "QQMusic 14090008(android 10)", "Cookie": auth.cookie },
     body: JSON.stringify({ comm: auth.comm, req_0: { module, method, param } })
@@ -14714,42 +14833,60 @@ async function qqAuthRpc(module, method, param, session3 = qqReadSession()) {
   if (body.req_0.data == null || typeof body.req_0.data !== "object") throw qqAuthError("QQ Music returned no data");
   return body.req_0.data;
 }
-async function qqAccountFor(session3) {
-  const data = await qqAuthRpc("music.UserInfo.userInfoServer", "GetLoginUserInfo", {}, session3);
+async function qqAccountFor(session3, send = fetch) {
+  const data = await qqAuthRpc("music.UserInfo.userInfoServer", "GetLoginUserInfo", {}, session3, send);
   if (!data.info || typeof data.info !== "object") throw qqAuthError("QQ Music returned no account information");
   const info = data.info;
   return { id: session3.musicid, name: info.nick || info.nickname || session3.musicid, imageUrl: info.headurl || info.logo || info.avatarUrl || info.avatar || "" };
 }
 async function qqFinishSignIn(value) {
-  const generation = ++signInGeneration;
+  cancelSignIn();
+  const generation = signInGeneration;
   const session3 = qqSession(value);
   if (!session3) throw qqAuthError("QQ Music login returned an invalid credential");
   const profile = await qqAccountFor(session3);
   if (generation !== signInGeneration) throw qqAccountChanged();
   host.storage.set(qqAuthStorageKey, session3);
   host.storage.set("qqmusic.profile.v1", profile);
+  host.storage.set(qqActiveStorageKey, true);
   return profile;
 }
 async function signIn() {
-  const generation = ++signInGeneration;
+  cancelSignIn();
+  const method = (typeof host.setting === "function" ? host.setting("loginMethod") || "" : "").trim().toLowerCase();
+  if (method && !["qq", "wechat", "\u5FAE\u4FE1", "wx"].includes(method)) throw qqAuthError(host.t("Login method must be QQ or WeChat"));
+  const generation = signInGeneration;
+  const task = createLoginTask(host.t("This sign-in attempt was canceled"));
+  signInTask = task;
   const current = () => {
     if (generation !== signInGeneration) throw qqAuthError(host.t("This sign-in attempt was canceled"));
   };
-  const method = (typeof host.setting === "function" ? host.setting("loginMethod") || "" : "").trim().toLowerCase();
-  if (method && !["qq", "wechat", "\u5FAE\u4FE1", "wx"].includes(method)) throw qqAuthError(host.t("Login method must be QQ or WeChat"));
   const isWechat = method !== "qq";
-  host.signInPrompt({ text: host.t(isWechat ? "Preparing WeChat QR code\u2026" : "Preparing QQ QR code\u2026") });
   const guardedFetch = async (...args) => {
     current();
-    const response = await fetch(...args);
+    const response = await task.fetch(...args);
     current();
     return response;
   };
   const deps = { fetch: guardedFetch, decodeQR, prompt: (value) => {
     current();
     host.signInPrompt(value);
-  }, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) };
+  }, sleep: task.sleep };
   try {
+    const previous = qqSession(host.storage.get(qqAuthStorageKey));
+    if (previous) {
+      try {
+        const profile2 = await qqAccountFor(previous, guardedFetch);
+        current();
+        host.storage.set("qqmusic.profile.v1", profile2);
+        host.storage.set(qqActiveStorageKey, true);
+        return profile2;
+      } catch (error) {
+        current();
+        if (error.qqGlobalCode !== 0 || ![1e3, 104400, 104401].includes(error.qqCode)) throw error;
+      }
+    }
+    host.signInPrompt({ text: host.t(isWechat ? "Preparing WeChat QR code\u2026" : "Preparing QQ QR code\u2026") });
     if (isWechat) {
       deps.randomBytes = await wechatRandom(guardedFetch, (text) => host.crypto.md5(text));
       deps.fetch = wechatCookieFetch(guardedFetch);
@@ -14757,10 +14894,11 @@ async function signIn() {
     const session3 = qqSession(await (isWechat ? wechatSignIn(deps) : qqSignIn(deps)));
     current();
     if (!session3) throw qqAuthError("QQ Music login returned an invalid credential");
-    const profile = await qqAccountFor(session3);
+    const profile = await qqAccountFor(session3, guardedFetch);
     current();
     host.storage.set(qqAuthStorageKey, session3);
     host.storage.set("qqmusic.profile.v1", profile);
+    host.storage.set(qqActiveStorageKey, true);
     return profile;
   } catch (error) {
     if (error.qqCode === 20279) {
@@ -14769,6 +14907,9 @@ async function signIn() {
     } else if (error.qqLoginStage === "wechat-token-exchange") error.message = host.t("QQ Music rejected the WeChat login ({global}/{code}/{subcode})").replace("{global}", error.qqGlobalCode).replace("{code}", error.qqCode).replace("{subcode}", error.qqSubcode || 0);
     else error.message = host.t(error.message);
     throw error;
+  } finally {
+    if (signInTask === task) signInTask = null;
+    task.cancel();
   }
 }
 async function account() {
@@ -14801,19 +14942,22 @@ async function account() {
         const cached = host.storage.get("qqmusic.profile.v1");
         return cached?.id === session3.musicid ? cached : { id: session3.musicid, name: session3.musicid, imageUrl: "" };
       }
-      host.storage.remove(qqAuthStorageKey);
-      host.storage.remove("qqmusic.profile.v1");
+      host.storage.set(qqActiveStorageKey, false);
       return null;
     }
     throw error;
   }
 }
 function signOut() {
-  signInGeneration++;
+  cancelSignIn();
   qqRefreshing = null;
   qqRefreshRetry = null;
-  host.storage.remove(qqAuthStorageKey);
-  host.storage.remove("qqmusic.profile.v1");
+  host.storage.set(qqActiveStorageKey, false);
+}
+function cancelSignIn() {
+  signInGeneration++;
+  signInTask?.cancel();
+  signInTask = null;
 }
 function createBrowse({ rpc: rpc2, cgi: cgi2, trackOf: trackOf2, t = (value) => value }) {
   const cursors = /* @__PURE__ */ new Map();
@@ -14843,7 +14987,7 @@ function createBrowse({ rpc: rpc2, cgi: cgi2, trackOf: trackOf2, t = (value) => 
   }
   async function home2() {
     const [featured, ranking] = await Promise.all([featuredPlaylists(), charts()]);
-    return { title: t("QQ Music"), sections: [{ title: t("Featured Playlists"), playlists: featured }, { title: t("Charts"), playlists: ranking }] };
+    return { title: t("QQ Music"), sections: [{ title: t("Featured Playlists"), morePage: "playlists", playlists: featured }, { title: t("Charts"), morePage: "charts", playlists: ranking }] };
   }
   async function browse2({ page }) {
     if (page === "playlists") return { title: t("Featured Playlists"), sections: [{ playlists: await featuredPlaylists() }] };
@@ -15984,7 +16128,7 @@ function decodeQRC(input) {
   }
   const inflater = new qrcPako.Inflate();
   if (!inflater.push(bytes2, false) || inflater.err || !inflater.ended) throw new Error("Invalid QRC compression");
-  return new TextDecoder("utf-8", { fatal: true }).decode(inflater.result);
+  return decodeUTF8(inflater.result, true);
 }
 export {
   account,
@@ -15992,6 +16136,7 @@ export {
   album,
   artist,
   browse,
+  cancelSignIn,
   comments,
   createBrowse,
   createLibrary,

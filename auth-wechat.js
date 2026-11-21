@@ -59,6 +59,7 @@ export async function refreshWechatSession(previous, fetch) {
   const data = { openid: previous.openid || '', refresh_token: previous.refresh_token || '', str_musicid: previous.musicid, musickey: previous.musickey, unionid: previous.unionid || '', refresh_key: previous.refresh_key || '', loginMode: 2 };
   const response = await request(fetch, MUSIC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'QQMusic 14090008(android 10)', Referer: 'https://y.qq.com/', Cookie: `uin=${previous.musicid}; qqmusic_uin=${previous.musicid}; qm_keyst=${previous.musickey}; qqmusic_key=${previous.musickey}` }, body: JSON.stringify({ comm: { ...comm(previous.device), qq: previous.musicid, authst: previous.musickey, tmeLoginType: 1 }, req: { module: 'music.login.LoginServer', method: 'Login', param: data } }) });
   const next = session(checked(await response.json(), 'req'), previous.device);
+  if (next.musicid !== previous.musicid) throw new Error('WeChat refresh: account mismatch');
   for (const key of ['openid', 'refresh_token', 'unionid', 'refresh_key', 'nick', 'logo', 'encryptUin']) if (!next[key] && previous[key]) next[key] = previous[key];
   return next;
 }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCipheriv, createDecipheriv, createHash, createPublicKey, publicEncrypt, constants } from 'node:crypto';
-import { wechatSignIn } from './auth-wechat.js';
+import { wechatSignIn, refreshWechatSession } from './auth-wechat.js';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -10,6 +10,11 @@ import { spawnSync } from 'node:child_process';
 
 const modulus='c4231830a2eb5fc2827170641e79d80fec51bda9a22e4b4ab37d1f205a4ae44d928cda25879f66a3429051663312a127faf8a246bdaaf63918417e90d7c95b5908aa6a2d0f852e4a6770294a548ac1c2fe8f1f252fb826f4ac86ab9a00e7ce47d002a56e7c4b51eb889acc60ca6adbc9f72e81f4d31b1dd7464805264530ab1d';
 const md5=s=>createHash('md5').update(s).digest('hex');
+test('WeChat refresh cannot switch to another account', async () => {
+  const previous = { musicid: '12345', musickey: 'old-fixture', loginType: 1, device: {}, refresh_key: 'refresh-fixture' };
+  const fetch = async () => Response.json({ code: 0, req: { code: 0, data: { str_musicid: '99999', musickey: 'new-fixture', loginType: 1 } } });
+  await assert.rejects(refreshWechatSession(previous, fetch), /account mismatch/);
+});
 function fixture(statuses=['408','404','408','405'], login={code:0,req:{code:0,data:{str_musicid:'1152921504606846976',musickey:'wechat-key',openid:'open',refresh_key:'refresh'}}}) {
   const calls=[],prompts=[];
   const deps={randomBytes:n=>new Uint8Array(n).fill(1),sleep:async()=>{},prompt:async v=>prompts.push(v),decodeQR:async b=>{assert.deepEqual([...b],[1,2,3]);return 'decoded-from-image';},fetch:async (url,opts={})=>{

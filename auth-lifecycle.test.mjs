@@ -29,8 +29,9 @@ for (const replacement of [null, '22222']) test(`late QQ refresh cannot replace 
   plugin.signOut();
   if (replacement) await plugin.qqFinishSignIn(session(replacement, { loginType: 1 }));
   reply.resolve(refreshed(original)); await pending;
-  assert.equal(storage.get(authKey)?.musicid, replacement || undefined);
+  assert.equal(storage.get(authKey)?.musicid, replacement || original.musicid);
   assert.equal(storage.get(profileKey)?.id, replacement || undefined);
+  assert.equal(storage.get('qqmusic.active.v1'), !!replacement);
 });
 
 // Account changes invalidate successful and rejected profile replies before either mutates state.
@@ -52,7 +53,8 @@ test('late WeChat refresh cannot restore a signed-out account', async () => {
   respond = body => body.req ? (entered.resolve(), reply.promise) : rejectedProfile(1000);
   const pending = assert.rejects(plugin.account(), /account changed/); await entered.promise;
   plugin.signOut(); reply.resolve(refreshed(original)); await pending;
-  assert.equal(storage.has(authKey), false);
+  assert.deepEqual(storage.get(authKey), original);
+  assert.equal(storage.get('qqmusic.active.v1'), false);
 });
 
 // Parallel account requests share a renewal, including a rotated refresh token.
@@ -86,7 +88,8 @@ for (const [loginType, code, keep] of [[2, 1000, true], [2, 104401, false], [1, 
     storage.set(profileKey, profile('11111'));
     respond = () => rejectedProfile(code);
     assert.deepEqual(await plugin.account(), keep ? profile('11111') : null);
-    assert.equal(storage.has(authKey), keep); assert.equal(storage.has(profileKey), keep);
+    assert.equal(storage.has(authKey), true); assert.equal(storage.has(profileKey), true);
+    assert.equal(plugin.qqReadSession() !== null, keep);
   });
 }
 

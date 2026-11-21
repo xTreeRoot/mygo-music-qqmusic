@@ -1,7 +1,7 @@
 {
   "id": "qqmusic",
   "name": "QQ Music",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "minAppVersion": "0.1.20",
   "main": "dist/index.js",
   "playback": "stream",
@@ -16,7 +16,11 @@
       "graph.qq.com",
       "api.tencentmusic.com",
       "open.weixin.qq.com",
-      "lp.open.weixin.qq.com"
+      "lp.open.weixin.qq.com",
+      "y.gtimg.cn",
+      "*.qqmusic.qq.com",
+      "music-file.y.qq.com",
+      "qpic.y.qq.com"
     ]
   },
   "settings": [
@@ -48,6 +52,34 @@
     },
     {
       "builtin": "stations"
+    }
+  ],
+  "requestHeaders": [
+    {
+      "hosts": [
+        "y.gtimg.cn",
+        "music-file.y.qq.com",
+        "qpic.y.qq.com"
+      ],
+      "kinds": [
+        "image"
+      ],
+      "headers": {
+        "Referer": "https://y.qq.com/",
+        "User-Agent": "Mozilla/5.0"
+      }
+    },
+    {
+      "hosts": [
+        "*.qqmusic.qq.com"
+      ],
+      "kinds": [
+        "audio"
+      ],
+      "headers": {
+        "Referer": "https://y.qq.com/",
+        "User-Agent": "Mozilla/5.0"
+      }
     }
   ]
 }
