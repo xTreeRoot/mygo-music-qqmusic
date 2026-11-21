@@ -1,7 +1,7 @@
 {
   "id": "qqmusic",
   "name": "QQ Music",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "minAppVersion": "0.1.20",
   "main": "dist/index.js",
   "playback": "stream",
@@ -27,7 +27,18 @@
     {
       "key": "loginMethod",
       "label": "Login method",
-      "help": "Leave empty for WeChat. Enter QQ to scan with the QQ app."
+      "help": "Choose WeChat or QQ before signing in. Unset uses WeChat. Switching methods requests a new QR code and keeps the old account until the new login succeeds.",
+      "type": "select",
+      "options": [
+        {
+          "value": "wechat",
+          "label": "WeChat"
+        },
+        {
+          "value": "qq",
+          "label": "QQ"
+        }
+      ]
     }
   ],
   "navigation": [
