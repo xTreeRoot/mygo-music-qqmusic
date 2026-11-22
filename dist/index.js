@@ -15085,6 +15085,11 @@ function decodeEntities(text) {
 var qqBrowse = createBrowse({ rpc, cgi, trackOf, t: (text) => host.t(text) });
 async function home() {
   const page = await qqBrowse.home();
+  page.sections.unshift(...(await personalRecommendations()).sections);
+  return page;
+}
+async function personalRecommendations() {
+  const page = { title: host.t("Recommended for You"), sections: [] };
   await qqKeepAlive();
   const session3 = qqReadSession();
   if (!session3) return page;
@@ -15101,7 +15106,10 @@ async function home() {
   }
   return page;
 }
-var browse = qqBrowse.browse;
+async function browse(input) {
+  if (input.page === "discovery:recommended") return personalRecommendations();
+  return qqBrowse.browse(input);
+}
 var comments = qqBrowse.comments;
 function createLibrary({ qqAuthRpc: qqAuthRpc2, qqReadSession: qqReadSession2, qqAuthCgi, cgi: cgi2, trackOf: trackOf2, keepAlive, fetch: fetchProfile = globalThis.fetch }) {
   async function account2(optional = false) {

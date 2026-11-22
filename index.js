@@ -716,6 +716,11 @@ function decodeEntities(text) {
 const qqBrowse = createBrowse({ rpc, cgi, trackOf, t: text => host.t(text) });
 export async function home() {
   const page = await qqBrowse.home();
+  page.sections.unshift(...(await personalRecommendations()).sections);
+  return page;
+}
+async function personalRecommendations() {
+  const page = { title: host.t("Recommended for You"), sections: [] };
   await qqKeepAlive();
   const session = qqReadSession();
   if (!session) return page;
@@ -733,7 +738,10 @@ export async function home() {
   }
   return page;
 }
-export const browse = qqBrowse.browse;
+export async function browse(input) {
+  if (input.page === "discovery:recommended") return personalRecommendations();
+  return qqBrowse.browse(input);
+}
 export const comments = qqBrowse.comments;
 
 // Authenticated RPC and CGI must send the Cookie for the supplied session.

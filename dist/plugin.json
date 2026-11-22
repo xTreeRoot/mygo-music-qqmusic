@@ -1,7 +1,7 @@
 {
   "id": "qqmusic",
   "name": "QQ Music",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "minAppVersion": "0.1.20",
   "main": "index.js",
   "playback": "stream",
@@ -96,6 +96,38 @@
     {
       "id": "wechat",
       "label": "微信扫码登录"
+    }
+  ],
+  "discovery": [
+    {
+      "id": "recommended",
+      "title": "为你推荐",
+      "page": "discovery:recommended"
+    },
+    {
+      "id": "featured",
+      "title": "精选歌单",
+      "page": "playlists"
+    },
+    {
+      "id": "charts",
+      "title": "排行榜",
+      "page": "charts"
+    },
+    {
+      "id": "liked",
+      "title": "喜欢的音乐",
+      "builtin": "liked"
+    },
+    {
+      "id": "savedAlbums",
+      "title": "收藏专辑",
+      "builtin": "savedAlbums"
+    },
+    {
+      "id": "stations",
+      "title": "电台",
+      "builtin": "stations"
     }
   ]
 }
