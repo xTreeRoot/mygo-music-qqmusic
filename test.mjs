@@ -330,3 +330,19 @@ test('comments use the anonymous endpoint even after signing in', async () => {
   };
   assert.deepEqual((await plugin.comments({ trackId: mid })).comments, []);
 });
+
+test('artist song pagination uses the requested offset and keeps songs if the album service fails', async () => {
+  respond = (_url, init) => {
+    const request = JSON.parse(init.body).req_0;
+    if (request.method === 'GetAlbumList') return response({ code: 0, req_0: { code: 500 } });
+    const offset = request.param.sin;
+    return response(envelope({ singer_info: { mid: 'artist-mid', name: 'Artist' }, singer_brief: 'Biography', total_song: 51,
+      songlist: Array.from({ length: offset ? 1 : 50 }, (_, i) => ({ ...song, mid: `song-${offset + i}` })) }));
+  };
+  const first = await plugin.artist({ id: 'artist-mid' });
+  assert.equal(first.tracks.length, 50); assert.equal(first.more, true);
+  assert.equal(first.artist.description, 'Biography'); assert.deepEqual(first.albums, []);
+  const next = await plugin.artist({ id: 'artist-mid', offset: 50 });
+  assert.equal(next.tracks[0].id, 'song-50'); assert.equal(next.more, false);
+  await assert.rejects(plugin.artist({ id: '../artist' }), { code: 'unavailable' });
+});

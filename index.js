@@ -335,13 +335,22 @@ export async function album({ id }) {
   return { album: result, tracks };
 }
 
-export async function artist({ id }) {
-  const data = await rpc("music.web_singer_info_svr", "get_singer_detail_info", { sort: 5, singermid: id, sin: 0, num: 50 });
-  const result = artistOf(data.singer_info || {});
+export async function artist({ id, offset = 0 }) {
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id) || !Number.isSafeInteger(offset) || offset < 0) fail('unavailable', '无效的歌手或分页位置');
+  const data = await rpc("music.web_singer_info_svr", "get_singer_detail_info", { sort: 5, singermid: id, sin: offset, num: 50 });
+  if (!data.singer_info?.name || !Array.isArray(data.songlist)) throw new Error('QQ 音乐未返回歌手资料');
+  const result = { ...artistOf(data.singer_info), description: data.singer_brief || '' };
   if (!result.id) result.id = id;
-  const list = await rpc("music.musichallAlbum.AlbumListServer", "GetAlbumList", { sort: 5, singermid: id, begin: 0, num: 50 }, { ct: 24, cv: 0 });
-  const albums = (list.albumList || list.albumlist || []).map(albumOf).filter(a => a.id);
-  return { artist: result, tracks: (data.songlist || []).map(trackOf).filter(t => t.id), albums };
+  let albums = [];
+  // 专辑附加请求失败不再使已有歌手资料和歌曲整页不可用。
+  if (offset === 0) {
+    try {
+      const list = await rpc("music.musichallAlbum.AlbumListServer", "GetAlbumList", { sort: 5, singermid: id, begin: 0, num: 50 }, { ct: 24, cv: 0 });
+      albums = (list.albumList || list.albumlist || []).map(albumOf).filter(a => a.id);
+    } catch (error) { if (error.name === 'AbortError' || error.code === 'signIn') throw error; }
+  }
+  const tracks = data.songlist.map(trackOf).filter(t => t.id);
+  return { artist: result, tracks, albums, more: tracks.length > 0 && offset + data.songlist.length < Number(data.total_song || 0) };
 }
 
 export function stations() {
