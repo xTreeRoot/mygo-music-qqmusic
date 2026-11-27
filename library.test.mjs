@@ -58,9 +58,9 @@ test('like resolves MID to numeric song ID and confirms state', async () => {
   assert.deepEqual(await lib.isLiked({ ids: ['song1'] }), { song1: true });
 });
 
-test('playlist edit resolves owned directory and rejects system lists', async () => {
+test('playlist edit resolves owned directory and rejects unknown system lists', async () => {
   const { lib, calls } = setup((method, p) => {
-    if (method === 'GetPlaylistByUin') return { v_playlist: [own, { tid: 901, dirId: 201, dirType: 0 }] };
+    if (method === 'GetPlaylistByUin') return { v_playlist: [own, { tid: 901, dirId: 202, dirType: 0 }] };
     if (method === 'get_song_detail_yqq') return { track_info: { mid: p.song_mid, id: 42 } };
     if (method === 'AddSonglist') { assert.deepEqual(p, { dirId: 12, v_songInfo: [{ songId: 42, songType: 0 }] }); return ok; }
     throw new Error(method);
@@ -213,4 +213,20 @@ test('album errors do not masquerade as success', async () => {
   const { lib } = setup(method => method === 'IsAlbumFan' ? { m_fan: { AlbumMID: false } } : { result: 0 }, signed, { qqAuthCgi: async () => ({ code: 0, data: { totalalbum: 1, albumlist: [] } }) });
   await assert.rejects(lib.savedAlbums(), /incomplete/);
   await assert.rejects(lib.saveAlbum({ id: 'AlbumMID', on: true }), /confirm/);
+});
+
+test('liked playlist removal uses native directory 201 and confirms unlike without renaming the system list',async()=>{
+ let liked=true;
+ const {lib,calls}=setup((method,p)=>{
+  if(method==='GetPlaylistByUin')return {v_playlist:[{tid:901,dirId:201,dirName:'Liked',uin:'10001'}]};
+  if(method==='CgiGetPlaylistFavInfo')return {v_list:[],hasmore:0};
+  if(method==='get_song_detail_yqq')return {track_info:{mid:p.song_mid,id:42}};
+  if(method==='DelSonglist'){assert.deepEqual(p,{dirId:201,v_songInfo:[{songId:42,songType:0}]});liked=false;return ok;}
+  if(method==='IsSongFanByMid')return {m_fan:{song1:liked}};
+  throw Error(method);
+ });
+ const [target]=await lib.playlists();assert.equal(target.fixed,true);assert.equal(target.removable,true);assert.equal(target.addable,true);
+ await lib.removeFromPlaylist({id:'901',trackIds:['song1']});assert.equal(liked,false);
+ await assert.rejects(lib.renamePlaylist({id:'901',name:'bad'}),/ordinary/);
+ assert.equal(calls.filter(c=>c.method==='DelSonglist').length,1);
 });

@@ -791,7 +791,9 @@ export function createLibrary({ qqAuthRpc, qqReadSession, qqAuthCgi, cgi, trackO
   // Current GetPlaylistByUin omits dirType. Ownership comes from the account's
   // list and owner ID; system directories (e.g. 201, liked songs) stay fixed.
   const editable = (p, s) => belongsTo(p, s) && Number.isInteger(Number(p.dirId)) && Number(p.dirId) > 0 && Number(p.dirId) < 200 && (p.dirType == null || Number(p.dirType) === 0) && !Number(p.invalid || 0);
-  const ownPlaylist = (p, s) => ({ ...asPlaylist(p, belongsTo(p, s)), fixed: !editable(p, s) });
+  const ownPlaylist = (p, s) => ({ ...asPlaylist(p, belongsTo(p, s)), fixed: !editable(p, s),
+    addable: belongsTo(p, s) && Number(p.dirId) === 201 && !Number(p.invalid || 0),
+    removable: belongsTo(p, s) && Number(p.dirId) === 201 && !Number(p.invalid || 0) });
   async function encrypted(s) {
     if (typeof s.encryptUin === 'string' && s.encryptUin) return s.encryptUin;
     const query = new URLSearchParams({ ct: '20', cv: '4747474', cid: '205360838', userid: s.musicid, format: 'json' });
@@ -942,6 +944,15 @@ export function createLibrary({ qqAuthRpc, qqReadSession, qqAuthCgi, cgi, trackO
     const s = await account();
     if (!Array.isArray(trackIds) || !trackIds.length || trackIds.length > 100) throw new Error('Select 1-100 songs');
     trackIds.forEach(mid);
+    const matches = (await owned(s)).filter(p => String(p.tid) === String(idNumber(id, 'playlist ID')));
+    const liked = matches.length === 1 && belongsTo(matches[0], s) && Number(matches[0].dirId) === 201 && !Number(matches[0].invalid || 0);
+    if (liked) {
+      const songIds = await Promise.all(trackIds.map(song => songID(s, song)));
+      await write(s, 'music.musicasset.PlaylistDetailWrite', add ? 'AddSonglist' : 'DelSonglist', { dirId: 201, v_songInfo: songIds.map(songId => ({ songId, songType: 0 })) });
+      const after = await status(s, trackIds);
+      if (trackIds.some(song => after[song] !== add)) throw new Error('QQ Music did not confirm liked state');
+      return;
+    }
     const p = await ordinary(s, id);
     const songIds = await Promise.all(trackIds.map(song => songID(s, song)));
     const result = await write(s, 'music.musicasset.PlaylistDetailWrite', add ? 'AddSonglist' : 'DelSonglist', { dirId: p.dir, v_songInfo: songIds.map(songId => ({ songId, songType: 0 })) });

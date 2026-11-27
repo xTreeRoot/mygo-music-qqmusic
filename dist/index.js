@@ -15156,7 +15156,12 @@ function createLibrary({ qqAuthRpc: qqAuthRpc2, qqReadSession: qqReadSession2, q
   const owned = async (s) => array((await call(s, "music.musicasset.PlaylistBaseRead", "GetPlaylistByUin", { uin: s.musicid })).v_playlist, "playlists");
   const belongsTo = (p, s) => !p.uin || String(p.uin) === s.musicid;
   const editable = (p, s) => belongsTo(p, s) && Number.isInteger(Number(p.dirId)) && Number(p.dirId) > 0 && Number(p.dirId) < 200 && (p.dirType == null || Number(p.dirType) === 0) && !Number(p.invalid || 0);
-  const ownPlaylist = (p, s) => ({ ...asPlaylist(p, belongsTo(p, s)), fixed: !editable(p, s) });
+  const ownPlaylist = (p, s) => ({
+    ...asPlaylist(p, belongsTo(p, s)),
+    fixed: !editable(p, s),
+    addable: belongsTo(p, s) && Number(p.dirId) === 201 && !Number(p.invalid || 0),
+    removable: belongsTo(p, s) && Number(p.dirId) === 201 && !Number(p.invalid || 0)
+  });
   async function encrypted(s) {
     if (typeof s.encryptUin === "string" && s.encryptUin) return s.encryptUin;
     const query3 = new URLSearchParams({ ct: "20", cv: "4747474", cid: "205360838", userid: s.musicid, format: "json" });
@@ -15314,6 +15319,15 @@ function createLibrary({ qqAuthRpc: qqAuthRpc2, qqReadSession: qqReadSession2, q
     const s = await account2();
     if (!Array.isArray(trackIds) || !trackIds.length || trackIds.length > 100) throw new Error("Select 1-100 songs");
     trackIds.forEach(mid);
+    const matches = (await owned(s)).filter((p2) => String(p2.tid) === String(idNumber(id, "playlist ID")));
+    const liked3 = matches.length === 1 && belongsTo(matches[0], s) && Number(matches[0].dirId) === 201 && !Number(matches[0].invalid || 0);
+    if (liked3) {
+      const songIds2 = await Promise.all(trackIds.map((song) => songID(s, song)));
+      await write(s, "music.musicasset.PlaylistDetailWrite", add ? "AddSonglist" : "DelSonglist", { dirId: 201, v_songInfo: songIds2.map((songId) => ({ songId, songType: 0 })) });
+      const after = await status2(s, trackIds);
+      if (trackIds.some((song) => after[song] !== add)) throw new Error("QQ Music did not confirm liked state");
+      return;
+    }
     const p = await ordinary(s, id);
     const songIds = await Promise.all(trackIds.map((song) => songID(s, song)));
     const result = await write(s, "music.musicasset.PlaylistDetailWrite", add ? "AddSonglist" : "DelSonglist", { dirId: p.dir, v_songInfo: songIds.map((songId) => ({ songId, songType: 0 })) });
