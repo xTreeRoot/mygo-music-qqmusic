@@ -1,12 +1,12 @@
-# QQ 音乐插件 · MB / MyGo
+# QQ 音乐插件 · 山海 / MyGo
 
-**0.3.8**，同一份插件用于 MB 桌面、iOS 和 Android。最低宿主兼容版本为 **MyGo 0.1.20**；移动端需支持 JavaScript 插件的 MB 版本。纯 JavaScript 直接连接腾讯服务，无需 API 服务、Node 后台、ffmpeg 或 Google 服务。
+**0.3.12**，同一份插件用于山海桌面、iOS 和 Android。最低宿主兼容版本为 **MyGo 0.1.20**；移动端需支持 JavaScript 插件的山海版本。纯 JavaScript 直接连接腾讯服务，无需 API 服务、Node 后台、ffmpeg 或 Google 服务。
 
 本项目由 xTreeRoot 维护，基于 [Lorpaves/mygo-music-qqmusic 0.3.5](https://github.com/Lorpaves/mygo-music-qqmusic)，继续保留 Amamiya23 上游历史及 AGPL-3.0、第三方许可证。来源见 [NOTICE.md](NOTICE.md)。
 
 ## 安装
 
-在 MB 的「设置 → 插件」中选择从 GitHub 安装，输入：
+在山海的「设置 → 插件」中选择从 GitHub 安装，输入：
 
 ```text
 xTreeRoot/mygo-music-qqmusic
@@ -57,7 +57,7 @@ xTreeRoot/mygo-music-qqmusic
 
 - 默认完整回归：223 项，220 项通过、0 失败、3 项可选在线 / MoeJS 测试跳过。覆盖源码和发行包的扫码切换、取消、旧会话恢复、封面规范化、搜索分页、音质回退、歌词及歌单行为。
 - 发行包单独通过桌面 MoeJS + Web APIs 的搜索、分页、歌词、音频和会话检查。
-- 从 MB `main` 只读提取 iOS / Android 实际 QuickJS 引擎和宿主脚本，发行包通过两种扫码交换、双向切换、会话保留、HTTPS 封面、中文歌词、QRC、音频及分页检查；接口使用合成响应。
+- 从山海 `main` 只读提取 iOS / Android 实际 QuickJS 引擎和宿主脚本，发行包通过两种扫码交换、双向切换、会话保留、HTTPS 封面、中文歌词、QRC、音频及分页检查；接口使用合成响应。
 - 匿名实网封面检查：本次首页和四类搜索共返回 172 个图片引用、121 个不同地址，全部通过 HTTPS、HTTP 200、图片内容类型及真实图片文件头检查；图片数量随推荐内容变化。
 - 匿名实网业务检查通过：四类搜索、下一页、建议、首页、榜单、967 首完整歌单、专辑、歌手、歌词、评论及真实 MP3 字节。
 - QQ / 微信官方二维码准备及取消检查通过；未进行真实账号扫码授权。VIP 音质和真机账号切换仍需实际授权验收。
@@ -77,14 +77,14 @@ python3 scripts/package.py
 
 `index.js` 是源码入口，仓库清单指向 `dist/index.js`；发行 ZIP 的清单指向同目录 `index.js`。构建后提交 `dist`，CI 会检查构建结果与提交内容一致。打包使用公开文件白名单，不包含账号和设置。
 
-可选真实运行时检查（只读访问 MB 仓库，产物和合成账号存储均放临时目录）：
+可选真实运行时检查（只读访问山海仓库，产物和合成账号存储均放临时目录）：
 
 ```sh
 MOEJS_HOST_DIR=/path/to/MB sh scripts/test-desktop-runtime.sh
 python3 scripts/test-mobile-runtime.py --mb /path/to/MB
 ```
 
-桌面检查需要与 MB `go.mod` 匹配的 Go；移动检查需要 Python 3、Clang 及本地 MB 的 `main` 引用。可选密码运算回归使用 `MOEJS_HOST_DIR` 环境变量，`go` 必须指向项目要求的工具链。
+桌面检查需要与山海 `go.mod` 匹配的 Go；移动检查需要 Python 3、Clang 及本地山海的 `main` 引用。可选密码运算回归使用 `MOEJS_HOST_DIR` 环境变量，`go` 必须指向项目要求的工具链。
 
 `npm run test:signed-in` 为上游保留的只读账号检查，必须自行确认插件数据路径，未在本次验证中执行。账号写入操作仅用合成响应测试，没有创建、删除或修改线上歌单或收藏。
 
